@@ -4,8 +4,7 @@
 #define _LINMATH_H
 
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 #endif
 #include <stdbool.h>
 #include <stdint.h>

@@ -1,6 +1,5 @@
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 #endif
 
 #include "src/survive_default_devices.h"

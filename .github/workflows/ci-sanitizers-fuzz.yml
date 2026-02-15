@@ -1,0 +1,179 @@
+name: CI (Sanitizers + Optional Fuzz)
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+  schedule:
+    # weekly, Sunday 03:17 UTC
+    - cron: "17 3 * * 0"
+
+concurrency:
+  group: ci-sanitizers-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-asan-ubsan:
+    name: Linux ASan+UBSan (ctest)
+    runs-on: ubuntu-latest
+    env:
+      BUILD_TYPE: Debug
+      # Keep libsurvive’s existing LSAN suppressions pattern (if present)
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/useful_files/leak_suppressions.txt
+      # Reasonable defaults for more actionable sanitizer output
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1:check_initialization_order=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake build-essential git \
+            libeigen3-dev liblapacke-dev libopenblas-dev libatlas-base-dev \
+            libpcap-dev libusb-1.0-0-dev zlib1g-dev \
+            freeglut3-dev libx11-dev \
+            python3 python3-pip
+
+      - name: Configure (Ninja, sanitizers)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            -DUSE_EIGEN=On -DDOWNLOAD_EIGEN=On \
+            -DENABLE_TESTS=ON \
+            -DUSE_ASAN=ON
+
+      - name: Build
+        run: cmake --build build --config ${BUILD_TYPE} --verbose
+
+      - name: Run tests (ctest)
+        working-directory: build
+        run: ctest -C ${BUILD_TYPE} --output-on-failure --parallel
+
+  linux-msan-smoke:
+    name: Linux MSan smoke (optional)
+    runs-on: ubuntu-latest
+    # MSan can be finicky; keep it non-blocking until you’ve tuned it.
+    continue-on-error: true
+    env:
+      BUILD_TYPE: Debug
+      MSAN_OPTIONS: halt_on_error=1:print_stats=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies (clang)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake git \
+            clang llvm lld \
+            libeigen3-dev liblapacke-dev libopenblas-dev libatlas-base-dev \
+            libpcap-dev libusb-1.0-0-dev zlib1g-dev \
+            freeglut3-dev libx11-dev \
+            python3 python3-pip
+
+      - name: Configure (MSan)
+        run: |
+          CC=clang CXX=clang++ cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            -DUSE_EIGEN=On -DDOWNLOAD_EIGEN=On \
+            -DENABLE_TESTS=ON \
+            -DUSE_MSAN=ON
+
+      - name: Build
+        run: cmake --build build --config ${BUILD_TYPE} --verbose
+
+      - name: Run tests (ctest)
+        working-directory: build
+        run: ctest -C ${BUILD_TYPE} --output-on-failure --parallel
+
+  linux-fuzz-optional:
+    name: Linux fuzz (auto-detect targets)
+    runs-on: ubuntu-latest
+    # This job only runs fuzzing if it detects a fuzz target in the build.
+    continue-on-error: true
+    env:
+      BUILD_TYPE: Debug
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies (clang)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake git \
+            clang llvm lld \
+            libeigen3-dev liblapacke-dev libopenblas-dev libatlas-base-dev \
+            libpcap-dev libusb-1.0-0-dev zlib1g-dev \
+            freeglut3-dev libx11-dev \
+            python3 python3-pip
+
+      - name: Configure (sanitizers, clang)
+        run: |
+          CC=clang CXX=clang++ cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            -DUSE_EIGEN=On -DDOWNLOAD_EIGEN=On \
+            -DENABLE_TESTS=ON \
+            -DUSE_ASAN=ON
+
+      - name: Build
+        run: cmake --build build --config ${BUILD_TYPE} --verbose
+
+      - name: Detect fuzz targets
+        id: detect
+        working-directory: build
+        shell: bash
+        run: |
+          # List targets; if you later add fuzz targets named like fuzz_* or *fuzz*,
+          # this will find them without needing to update the workflow.
+          ninja -t targets all | awk '{print $1}' | tee /tmp/targets.txt
+          if grep -Eiq '(^|/)(fuzz_|.*fuzz.*)$' /tmp/targets.txt; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "targets<<EOF" >> $GITHUB_OUTPUT
+            grep -Ei '(^|/)(fuzz_|.*fuzz.*)$' /tmp/targets.txt | head -n 10 >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build fuzz targets (if any)
+        if: steps.detect.outputs.found == 'true'
+        run: |
+          echo "Fuzz targets detected:"
+          echo "${{ steps.detect.outputs.targets }}"
+          # Build the first few detected fuzz targets (cap to keep CI fast).
+          while read -r t; do
+            echo "Building fuzz target: $t"
+            cmake --build build --target "$t" --config ${BUILD_TYPE} --verbose || true
+          done <<< "${{ steps.detect.outputs.targets }}"
+
+      - name: Run fuzz smoke (if any)
+        if: steps.detect.outputs.found == 'true'
+        shell: bash
+        run: |
+          # If you produce runnable fuzz executables, run a short smoke.
+          # This assumes output binaries are in build/; adjust once you add real fuzz harnesses.
+          set -euo pipefail
+          for exe in build/fuzz_* build/*fuzz*; do
+            if [[ -x "$exe" ]]; then
+              echo "Running fuzz smoke: $exe"
+              "$exe" -runs=200 || true
+            fi
+          done
+

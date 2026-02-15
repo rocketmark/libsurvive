@@ -19,8 +19,7 @@
 
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
 #include <cnmatrix/cn_matrix.h>
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 
 #endif
 

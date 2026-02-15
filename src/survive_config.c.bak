@@ -6,8 +6,7 @@
 #if defined(__FreeBSD__) || defined(__APPLE__)
 #include <stdlib.h>
 #else
-#include <stdlib.h>
-#include <alloca.h> //for alloca
+#include <malloc.h> //for alloca
 #endif
 
 #include "ctype.h"

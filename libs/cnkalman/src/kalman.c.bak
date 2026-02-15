@@ -1,7 +1,6 @@
 #include "cnkalman/kalman.h"
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 #endif
 #include <cnkalman/kalman.h>
 #include <cnkalman/numerical_diff.h>

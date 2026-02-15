@@ -9,7 +9,7 @@
 #include "json_helpers.h"
 #include <jsmn.h>
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
+#include <malloc.h>
 #endif
 
 #ifdef _MSC_VER

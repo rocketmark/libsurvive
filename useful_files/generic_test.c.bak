@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <inttypes.h>
-#include <stdlib.h>
+#include <malloc.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
