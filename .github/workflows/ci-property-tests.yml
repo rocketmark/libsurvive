@@ -1,0 +1,51 @@
+name: Property Tests (ASan+UBSan)
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: property-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  property-tests:
+    name: Property tests (ASan+UBSan)
+    runs-on: ubuntu-latest
+    env:
+      BUILD_TYPE: Debug
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/useful_files/leak_suppressions.txt
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1:check_initialization_order=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake build-essential git \
+            libeigen3-dev liblapacke-dev libopenblas-dev \
+            libpcap-dev libusb-1.0-0-dev zlib1g-dev \
+            freeglut3-dev libx11-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            -DUSE_EIGEN=On -DDOWNLOAD_EIGEN=On \
+            -DENABLE_TESTS=ON \
+            -DUSE_ASAN=ON
+
+      - name: Build
+        run: cmake --build build --config ${BUILD_TYPE}
+
+      - name: Run property tests
+        working-directory: build
+        timeout-minutes: 5
+        run: |
+          ctest -C ${BUILD_TYPE} --output-on-failure --parallel \
+            -R '(quat|reproject|kabsch|kalman|numeric)_props'
