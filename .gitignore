@@ -18,6 +18,7 @@ build*
 .cache/
 
 # Temp files
+*.bak
 *~
 */\#*\#
 \#*\#
