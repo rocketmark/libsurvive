@@ -202,7 +202,7 @@ TEST(NumericProps, ReprojectExtremeDistance) {
 	srand(seed);
 
 	for (int trial = 0; trial < N_TRIALS; trial++) {
-		BaseStationCal bcal[2] = {{0}, {0}}; // zero calibration
+		BaseStationCal bcal[2] = {0}; // zero calibration
 
 		// Point directly ahead at extreme distance
 		FLT dist = rand_range(100.0, 10000.0);
