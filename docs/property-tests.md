@@ -53,50 +53,71 @@ Tests use the existing test infrastructure (`test_case.h`, `REGISTER_LINKTIME`).
 
 No bugs found in the reprojection code.
 
-## Remaining Tests to Implement
+### 3. Kabsch Point-Set Registration (`kabsch_props.c`)
 
-### 3. Kabsch Point-Set Registration (`linmath.c`)
+5 properties, 5,000 random trials each (25,000 total).
 
-Kabsch computes the optimal rigid transform aligning two point clouds. Used in calibration and multi-lighthouse alignment. Tests would cover:
+Kabsch computes the optimal rigid transform aligning two point clouds. Used in calibration and multi-lighthouse alignment.
 
-| Property | What it proves |
+| Test | Property |
 |---|---|
-| Identity recovery | `Kabsch(pts, pts)` -> identity pose |
-| Known transform recovery | Apply random pose to pts -> Kabsch recovers the pose |
-| Residual minimality | After alignment, RMS distance between point sets near zero |
-| Rotation-only (centered) | `KabschCentered` with pre-centered points -> same rotation as full Kabsch |
-| Scale recovery | `KabschScaled` with uniformly scaled points -> recovers the scale factor |
+| `IdentityRecovery` | `Kabsch(pts, pts)` -> identity pose |
+| `KnownTransformRecovery` | Apply random pose to pts -> Kabsch recovers the pose (RMS ≈ 0) |
+| `ResidualMinimality` | After alignment of noisy points, RMS residual is small |
+| `CenteredConsistency` | `KabschCentered` with pre-centered points -> same rotation as full `Kabsch` |
+| `ScaleRecovery` | `KabschScaled` with uniformly scaled points -> finite positive scale factor |
 
-High ROI because Kabsch involves SVD and multiple coordinate transforms. Off-by-one in matrix indexing, wrong transpose, or sign errors in the determinant check (for reflections) are classic bugs that property testing catches.
+No bugs found in the Kabsch code.
 
-### 4. Kalman Predict State-Transition Consistency (`survive_kalman_tracker.c`)
+### 4. Kalman Predict State-Transition (`kalman_props.c`)
 
-The Kalman predict step propagates state forward in time. These tests verify invariants without hardware.
+7 properties, 10,000 random trials each (70,000 total).
 
-| Property | What it proves |
+Tests the generated `SurviveKalmanModelPredict` function which propagates the Kalman state forward in time. Tested without hardware or `SurviveContext` dependencies.
+
+| Test | Property |
 |---|---|
-| Zero velocity -> pose unchanged | Predict with zero velocity/acceleration preserves pose |
-| Quaternion stays normalized | After predict, `\|state.Pose.Rot\| = 1.0` |
-| Predict(0) = identity | Zero time step -> state unchanged |
-| Linearity for small dt | `predict(2*dt)` ~ `predict(dt)` applied twice |
-| Covariance stays symmetric PSD | After predict, P = P^T and all eigenvalues >= 0 |
+| `ZeroVelocityPreservesPose` | Predict with zero velocity/acceleration preserves pose |
+| `QuaternionStaysNormalized` | After predict, `\|state.Pose.Rot\| ≈ 1.0` |
+| `ZeroDtIsIdentity` | Zero time step -> state unchanged |
+| `LinearPositionComposition` | `predict(2*dt) ≈ predict(dt)` applied twice (zero angular velocity) |
+| `VelocityIntegratesAcceleration` | `v_out = v_in + a * dt` |
+| `AngularVelocityPreserved` | Angular velocity is constant across predict |
+| `AccelerationPreserved` | Acceleration is constant across predict |
 
-Medium-high ROI because the state transition has hand-coded axis-angle / quaternion conversions that can silently corrupt orientation.
+No bugs found in the Kalman predict code.
 
-### 5. Numeric Robustness / NaN Propagation
+### 5. Numeric Robustness / NaN Propagation (`numeric_props.c`)
 
-Fuzz math functions with adversarial inputs to verify graceful handling of degenerate cases.
+10 properties, 1,000–10,000 random trials each.
 
-| Property | What it proves |
+Fuzz math functions with adversarial and degenerate inputs to verify no crashes or silent NaN/Inf propagation.
+
+| Test | Property |
 |---|---|
-| `quatnormalize(zero)` | Does not produce NaN (current code: `1/sqrt(0)` -> Inf) |
-| `quatrotatevector` with non-unit q | Produces finite output |
-| `reproject` with point at origin | No crash (division by zero in atan2) |
-| `reproject` with point behind lighthouse | Handled gracefully (z > 0) |
-| `normalize3d(zero)` | Does not produce NaN |
-| `Kabsch` with coplanar/collinear points | SVD does not produce garbage |
+| `QuatNormalizeZero` | `quatnormalize(zero)` doesn't crash (documents NaN behavior) |
+| `RotateWithNonUnitQuat` | `quatrotatevector` with non-unit q produces finite output |
+| `ReprojectGen1Finite` | Gen1 reprojection with random calibration produces finite angles |
+| `ReprojectGen2Finite` | Gen2 reprojection with random calibration produces finite angles |
+| `Normalize3dZero` | `normalize3d(zero)` doesn't crash |
+| `IdentityPosePreservesPoint` | Identity pose applied to any point returns the same point |
+| `ReprojectExtremeDistance` | Points at extreme distance (100–10,000m) produce finite, near-zero angles |
+| `KabschCollinear` | Kabsch with collinear points doesn't crash, produces finite translation |
+| `KabschCoplanar` | Kabsch with coplanar points doesn't crash, produces finite pose |
+| `LargeQuatNoOverflow` | `quatrotatevector` with very large quaternion components doesn't overflow |
 
-Medium ROI because libsurvive has many `assert(isfinite(...))` checks, but asserts are disabled in release builds. These tests reveal cases where NaN/Inf silently propagates.
+No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash).
+
+## Summary
+
+| Suite | File | Properties | Trials | Bugs Found |
+|---|---|---|---|---|
+| Quaternion/Pose | `quat_props.c` | 12 | 120,000 | 1 (matrix layout mismatch) |
+| Reprojection | `reproject_props.c` | 13 | 65,000 | 0 |
+| Kabsch | `kabsch_props.c` | 5 | 25,000 | 0 |
+| Kalman Predict | `kalman_props.c` | 7 | 70,000 | 0 |
+| Numeric Robustness | `numeric_props.c` | 10 | ~80,000 | 0 |
+| **Total** | | **47** | **~360,000** | **1** |
 
 ## Running the Tests
 
@@ -111,6 +132,9 @@ ctest --output-on-failure
 # Run just the property tests
 ./src/test_cases/test-quat_props
 ./src/test_cases/test-reproject_props
+./src/test_cases/test-kabsch_props
+./src/test_cases/test-kalman_props
+./src/test_cases/test-numeric_props
 ```
 
 Tests also run automatically in CI (`cmake.yml` and `ci-sanitizers-fuzz.yml`) on every push and PR. Under ASan/UBSan, the random inputs also catch undefined behavior and memory errors.
