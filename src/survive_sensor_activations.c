@@ -132,8 +132,6 @@ static inline bool SurviveSensorActivations_check_outlier(SurviveSensorActivatio
 	FLT *oldangle = &self->angles[sensor_id][lh][axis];
 	FLT chauvenet_criterion = -1;
 	FLT dev = 0;
-	FLT measured_dev = -1;
-	int cnt = -1;
 	const char *failure_reason = "None";
 	if (self->angles_center_dev[lh][axis] == 0) {
 		goto accept_data;
@@ -145,9 +143,9 @@ static inline bool SurviveSensorActivations_check_outlier(SurviveSensorActivatio
 		goto delta_failure;
 	}
 
-	measured_dev = self->angles_center_dev[lh][axis];
+	FLT measured_dev = self->angles_center_dev[lh][axis];
 	dev = linmath_max(self->params.filterVarianceMin, measured_dev);
-	cnt = self->angles_center_cnt[lh][axis];
+	int cnt = self->angles_center_cnt[lh][axis];
 	if (cnt < self->params.filterOutlierMinCount)
 		cnt = self->params.filterOutlierMinCount;
 	chauvenet_criterion = linmath_chauvenet_criterion(angle, self->angles_center_x[lh][axis], dev, cnt);
