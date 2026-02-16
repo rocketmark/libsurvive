@@ -3,9 +3,11 @@ SET(SURVIVE_TESTS
         check_generated barycentric_svd optimizer
         rotate_angvel export_config
         quat_props reproject_props
-        kabsch_props kalman_props numeric_props)
+        kabsch_props kalman_props numeric_props
+        reproject_residual_props)
 
 set(barycentric_svd_ADDITIONAL_SRCS ../barycentric_svd/barycentric_svd.c)
+set(reproject_residual_props_ADDITIONAL_SRCS ../barycentric_svd/barycentric_svd.c)
 
 IF(NOT WIN32)
     LIST(APPEND SURVIVE_TESTS watchman)
