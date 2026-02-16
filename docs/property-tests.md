@@ -108,6 +108,23 @@ Fuzz math functions with adversarial and degenerate inputs to verify no crashes 
 
 No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash).
 
+### 6. Reprojection Residual / BSVD Pose Solver (`reproject_residual_props.c`)
+
+6 properties, 1,000 random trials each (6,000 total).
+
+Full roundtrip tests: generate random pose at VP-realistic distances (1–4m) → reproject 12 sensor positions (golden-angle spiral on 5cm sphere) to get synthetic lighthouse angles → solve pose with BSVD → compare recovered pose to original. Then corrupt angles to simulate lighthouse reflections off shiny surfaces (truss, LED walls) and verify the solver is robust and residuals identify bad sensors.
+
+| Test | Property |
+|---|---|
+| `CleanRoundtrip` | Reproject → BSVD solve → recovered pose matches original (< 0.02 error) |
+| `ReprojectionResidualSmall` | After clean solve, all per-sensor residuals < 1e-4 rad |
+| `SingleOutlierDetectable` | Corrupt 1 sensor 0.05–0.3 rad → its residual > 5x median (>90% detection rate) |
+| `SingleOutlierPoseStable` | With 1 corrupted sensor out of 8+, pose error < 0.30 |
+| `MultipleOutliersDegradeGracefully` | 2–3 corrupted sensors out of 9+, pose error < 0.60 |
+| `ResidualIdentifiesCorruptedSensor` | Max-residual sensor is the corrupted one (>85% identification rate, 0.10 rad min offset) |
+
+No bugs found. BSVD pose solver handles single-sensor corruption gracefully — pose remains stable and residuals reliably identify the corrupted sensor.
+
 ## Summary
 
 | Suite | File | Properties | Trials | Bugs Found |
@@ -117,7 +134,8 @@ No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (doc
 | Kabsch | `kabsch_props.c` | 5 | 25,000 | 0 |
 | Kalman Predict | `kalman_props.c` | 7 | 70,000 | 0 |
 | Numeric Robustness | `numeric_props.c` | 10 | ~80,000 | 0 |
-| **Total** | | **47** | **~360,000** | **1** |
+| Reprojection Residual | `reproject_residual_props.c` | 6 | 6,000 | 0 |
+| **Total** | | **53** | **~366,000** | **1** |
 
 ## Running the Tests
 
@@ -135,6 +153,7 @@ ctest --output-on-failure
 ./src/test_cases/test-kabsch_props
 ./src/test_cases/test-kalman_props
 ./src/test_cases/test-numeric_props
+./src/test_cases/test-reproject_residual_props
 ```
 
-Tests also run automatically in CI (`cmake.yml` and `ci-sanitizers-fuzz.yml`) on every push and PR. Under ASan/UBSan, the random inputs also catch undefined behavior and memory errors.
+Tests also run automatically in CI (`ci-property-tests.yml`) on every push and PR. Under ASan/UBSan, the random inputs also catch undefined behavior and memory errors.
