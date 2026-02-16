@@ -53,7 +53,8 @@ jobs:
 
       - name: Run tests (ctest)
         working-directory: build
-        run: ctest -C ${BUILD_TYPE} --output-on-failure --parallel
+        timeout-minutes: 15
+        run: ctest -C ${BUILD_TYPE} --output-on-failure --parallel --timeout 300
 
   linux-msan-smoke:
     name: Linux MSan smoke (optional)
@@ -95,7 +96,8 @@ jobs:
 
       - name: Run tests (ctest)
         working-directory: build
-        run: ctest -C ${BUILD_TYPE} --output-on-failure --parallel
+        timeout-minutes: 30
+        run: ctest -C ${BUILD_TYPE} --output-on-failure --parallel --timeout 600
 
   linux-fuzz-optional:
     name: Linux fuzz (auto-detect targets)
