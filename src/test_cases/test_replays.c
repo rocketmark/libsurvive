@@ -4,8 +4,7 @@
 
 #include <complex.h>
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 #endif
 #include <math.h>
 #include <os_generic.h>

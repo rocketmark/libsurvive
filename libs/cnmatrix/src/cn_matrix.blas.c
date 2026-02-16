@@ -18,8 +18,7 @@
 
 #ifdef _WIN32
 #define SURVIVE_LOCAL_ONLY
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 #define alloca _alloca
 #else
 #define SURVIVE_LOCAL_ONLY __attribute__((visibility("hidden")))

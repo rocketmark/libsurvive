@@ -6,8 +6,7 @@
 #include <windows.h>
 #include <stdlib.h>
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
-#include <alloca.h> //for alloca
+#include <malloc.h> //for alloca
 #endif
 
 static HBITMAP lsBitmap;

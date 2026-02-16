@@ -6,7 +6,7 @@
 #include "survive.h"
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
 #include <cnmatrix/cn_matrix.h>
-#include <stdlib.h>
+#include <malloc.h>
 #endif
 
 static void bc_svd_choose_control_points(bc_svd *self) {

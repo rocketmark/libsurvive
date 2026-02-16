@@ -2,7 +2,7 @@
 #include "cnmatrix/cn_matrix.h"
 #include "math.h"
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
+#include <malloc.h>
 #endif
 #include <stdio.h>
 #include <stdlib.h>

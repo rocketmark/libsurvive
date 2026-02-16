@@ -24,8 +24,7 @@
 #include <string.h>
 
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 #endif
 
 /* Forward declarations of functions in this module */

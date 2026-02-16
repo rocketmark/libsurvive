@@ -9,7 +9,7 @@
 
 #include <assert.h>
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
-#include <stdlib.h>
+#include <malloc.h>
 #endif
 #include <memory.h>
 #include <stddef.h>

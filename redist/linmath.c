@@ -11,8 +11,7 @@
 #include <cnmatrix/cn_matrix.h>
 #if !defined(__FreeBSD__) && !defined(__APPLE__)
 #include <assert.h>
-#include <stdlib.h>
-#include <alloca.h>
+#include <malloc.h>
 #endif
 
 #ifndef M_PI
