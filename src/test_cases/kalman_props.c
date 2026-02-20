@@ -263,3 +263,132 @@ TEST(KalmanProps, AccelerationPreserved) {
 	}
 	return 0;
 }
+
+// ── Long-Duration Stability Tests ──────────────────────────────────
+//
+// These test the predict step over many thousands of iterations,
+// simulating extended tracking sessions (the kind that fail at ~24 min).
+// If the kinematics accumulate numerical error, these will catch it.
+
+// 8. Quaternion stays normalized after many consecutive predict steps
+//
+// At ~1kHz IMU rate, 24 minutes = 1,440,000 steps. Even tiny per-step
+// drift in quaternion magnitude will diverge. We test 200,000 steps
+// with periodic renormalization (matching the real normalize_model call).
+TEST(KalmanProps, RepeatedPredictQuatStaysNormalized) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 20; trial++) {
+		SurviveKalmanModel state;
+		rand_kalman_state(&state);
+
+		FLT dt = 0.001;  // 1ms — typical IMU rate
+		int n_steps = 200000;
+
+		for (int i = 0; i < n_steps; i++) {
+			SurviveKalmanModel next = {0};
+			SurviveKalmanModelPredict(&next, dt, &state);
+			state = next;
+
+			// Renormalize every 1000 steps like normalize_model does
+			if (i % 1000 == 0) {
+				quatnormalize(state.Pose.Rot, state.Pose.Rot);
+			}
+		}
+
+		FLT mag = quatmagnitude(state.Pose.Rot);
+		if (fabs(mag - 1.0) > 1e-2) {
+			fprintf(stderr, "RepeatedPredictQuatStaysNormalized FAILED (seed=%u, trial=%d)\n", seed, trial);
+			fprintf(stderr, "  After %d steps: |q| = %.15f\n", n_steps, mag);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// 9. Zero-velocity predict is stable over very long durations
+//
+// A stationary tracker should not drift in position after 100,000+
+// predict steps. Catches numerical accumulation errors.
+TEST(KalmanProps, ZeroVelocityLongDurationStable) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 100; trial++) {
+		SurviveKalmanModel state = {0};
+		rand_point(state.Pose.Pos);
+		rand_unit_quat(state.Pose.Rot);
+		// Velocity and acceleration are zero
+
+		LinmathPoint3d original_pos;
+		memcpy(original_pos, state.Pose.Pos, sizeof(original_pos));
+
+		FLT dt = 0.001;
+		int n_steps = 100000;  // 100 seconds at 1kHz
+
+		for (int i = 0; i < n_steps; i++) {
+			SurviveKalmanModel next = {0};
+			SurviveKalmanModelPredict(&next, dt, &state);
+			state = next;
+		}
+
+		for (int j = 0; j < 3; j++) {
+			FLT drift = fabs(state.Pose.Pos[j] - original_pos[j]);
+			if (drift > 1e-3) {
+				fprintf(stderr, "ZeroVelocityLongDurationStable FAILED (seed=%u, trial=%d)\n", seed, trial);
+				fprintf(stderr, "  After %d steps: Pos[%d] drifted %.10f (original=%.6f, final=%.6f)\n",
+						n_steps, j, drift, original_pos[j], state.Pose.Pos[j]);
+				return -1;
+			}
+		}
+	}
+	return 0;
+}
+
+// 10. Repeated predict with constant velocity accumulates linearly
+//
+// After N steps of dt with velocity v (zero accel, zero angular vel),
+// position should be p0 + v * N * dt. Tests numerical stability over
+// long tracking sessions.
+TEST(KalmanProps, ConstantVelocityAccumulation) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 100; trial++) {
+		SurviveKalmanModel state = {0};
+		state.Pose.Rot[0] = 1.0;  // Identity quaternion
+		for (int j = 0; j < 3; j++) {
+			state.Pose.Pos[j] = rand_range(-5.0, 5.0);
+			state.Velocity.Pos[j] = rand_range(-1.0, 1.0);
+		}
+
+		LinmathPoint3d p0;
+		memcpy(p0, state.Pose.Pos, sizeof(p0));
+		FLT v[3];
+		memcpy(v, state.Velocity.Pos, sizeof(v));
+
+		FLT dt = 0.001;
+		int n_steps = 50000;  // 50 seconds
+
+		for (int i = 0; i < n_steps; i++) {
+			SurviveKalmanModel next = {0};
+			SurviveKalmanModelPredict(&next, dt, &state);
+			state = next;
+		}
+
+		FLT T = dt * n_steps;
+		for (int j = 0; j < 3; j++) {
+			FLT expected = p0[j] + v[j] * T;
+			FLT error = fabs(state.Pose.Pos[j] - expected);
+			FLT tolerance = fabs(expected) * 1e-3 + 1e-3;
+			if (error > tolerance) {
+				fprintf(stderr, "ConstantVelocityAccumulation FAILED (seed=%u, trial=%d)\n", seed, trial);
+				fprintf(stderr, "  After %d steps (T=%.3fs): Pos[%d] expected=%.6f got=%.6f (err=%.6f)\n",
+						n_steps, T, j, expected, state.Pose.Pos[j], error);
+				return -1;
+			}
+		}
+	}
+	return 0;
+}

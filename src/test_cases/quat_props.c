@@ -246,39 +246,27 @@ TEST(QuatProps, PoseComposeInverseIsIdentity) {
 }
 
 // 8. quattomatrix33 → quatfrommatrix33 roundtrip: recovers ±q
-//
-// KNOWN BUG: quattomatrix33 outputs column-major ("opengl major") but
-// quatfrommatrix33 reads row-major. The transpose of a rotation matrix is
-// its inverse, so the roundtrip produces the conjugate (inverse rotation)
-// instead of the original quaternion. quatfromcnMatrix does not have this
-// issue because it uses cnMatrixGet(row, col).
-//
-// This test verifies the bug exists so we know if it gets fixed.
-TEST(QuatProps, MatrixRoundtrip_KNOWN_BUG) {
+TEST(QuatProps, MatrixRoundtrip) {
 	unsigned seed = (unsigned)time(NULL);
 	srand(seed);
 
 	for (int i = 0; i < N_TRIALS; i++) {
-		LinmathQuat q, recovered, q_conj;
+		LinmathQuat q, recovered;
 		FLT mat[9];
 
 		rand_unit_quat(q);
 		quattomatrix33(mat, q);
 		quatfrommatrix33(recovered, mat);
-		quatgetconjugate(q_conj, q);
 
-		// Due to the column/row major mismatch, recovered ≈ ±conj(q)
-		FLT sign = (quatinnerproduct(q_conj, recovered) < 0) ? -1.0 : 1.0;
+		// recovered ≈ ±q (sign ambiguity is inherent to quat ↔ matrix)
+		FLT sign = (quatinnerproduct(q, recovered) < 0) ? -1.0 : 1.0;
 
 		for (int j = 0; j < 4; j++) {
-			if (fabs(recovered[j] * sign - q_conj[j]) > QUAT_TOL) {
-				fprintf(stderr, "MatrixRoundtrip_KNOWN_BUG FAILED (seed=%u, trial=%d)\n", seed, i);
+			if (fabs(recovered[j] * sign - q[j]) > QUAT_TOL) {
+				fprintf(stderr, "MatrixRoundtrip FAILED (seed=%u, trial=%d)\n", seed, i);
 				fprintf(stderr, "  q:         [%.10f, %.10f, %.10f, %.10f]\n", q[0], q[1], q[2], q[3]);
-				fprintf(stderr, "  conj(q):   [%.10f, %.10f, %.10f, %.10f]\n",
-						q_conj[0], q_conj[1], q_conj[2], q_conj[3]);
 				fprintf(stderr, "  recovered: [%.10f, %.10f, %.10f, %.10f]\n",
 						recovered[0], recovered[1], recovered[2], recovered[3]);
-				fprintf(stderr, "  (Expected recovered ≈ ±conj(q) due to col/row major mismatch)\n");
 				return -1;
 			}
 		}

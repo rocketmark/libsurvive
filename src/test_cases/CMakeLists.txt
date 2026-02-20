@@ -4,7 +4,9 @@ SET(SURVIVE_TESTS
         rotate_angvel export_config
         quat_props reproject_props
         kabsch_props kalman_props numeric_props
-        reproject_residual_props)
+        reproject_residual_props event_queue_props
+        residual_cascade_props
+        variance_gate_props)
 
 set(barycentric_svd_ADDITIONAL_SRCS ../barycentric_svd/barycentric_svd.c)
 set(reproject_residual_props_ADDITIONAL_SRCS ../barycentric_svd/barycentric_svd.c)
