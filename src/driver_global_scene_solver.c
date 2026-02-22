@@ -131,7 +131,7 @@ static size_t add_scenes(struct global_scene_solver *gss, SurviveObject *so) {
 }
 
 static bool run_optimization(global_scene_solver *gss) {
-	if (gss->solve_counts > gss->solve_count_max && gss->solve_count_max > 0)
+	if (gss->solve_count_max > 0 && gss->solve_counts >= gss->solve_count_max)
 		return false;
 
 	OGLockMutex(gss->scenes_lock);
@@ -206,7 +206,7 @@ static void set_needs_solve(global_scene_solver *gss) {
 }
 
 static size_t check_object(global_scene_solver *gss, int i, SurviveObject *so) {
-	if (gss->solve_counts > gss->solve_count_max && gss->solve_count_max > 0)
+	if (gss->solve_count_max > 0 && gss->solve_counts >= gss->solve_count_max)
 		return false;
 
 	if (OGTryLockMutex(gss->scenes_lock) != 0)
@@ -379,7 +379,7 @@ int DriverRegGlobalSceneSolver(SurviveContext *ctx) {
 	global_scene_solver_attach_config(ctx, driver);
 
 	int flag = survive_configi(ctx, GSS_ENABLE_TAG, SC_GET, 1);
-	driver->solve_count_max = flag > 1 ? flag : -1;
+	driver->solve_count_max = flag > 0 ? flag : -1;
 
 	driver->imu_fn = survive_install_imu_fn(ctx, imu_fn);
 	driver->prior_sync_fn = survive_install_sync_fn(ctx, sync_fn);

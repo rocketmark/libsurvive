@@ -722,6 +722,10 @@ static int AttachInterface(SurviveViveData *sv, struct SurviveUSBInfo *usbObject
 		return 4;
 	}
 	memset(iface->swap_buffer, 0xCA, sizeof(iface->swap_buffer));
+	/* Use timeout=0 (infinite) for the initial transfer. Some endpoints (e.g.
+	 * EP 0x84 controller) only send data on events and may never send a first
+	 * packet if the device is idle. The success callback sets timeout=1000 after
+	 * the first packet arrives. */
 	libusb_fill_interrupt_transfer(tx, devh, endpoint_num, iface->swap_buffer[0], INTBUFFSIZE, handle_transfer, iface,
 								   0);
 

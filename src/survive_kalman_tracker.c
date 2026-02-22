@@ -944,6 +944,13 @@ void survive_kalman_tracker_process_noise(const struct SurviveKalmanTracker_Para
 	 * positional model with a second order rotational model with tuning parameters
 	 */
 
+	/* Cap process noise dt to prevent t^7 explosion from IMU timing gaps.
+	 * Normal IMU rate is 1ms; 50ms is 50x that, generous for jitter but
+	 * prevents catastrophic P growth (t=1s → t^7=1.0 vs t=50ms → t^7=8e-10).
+	 * State prediction still uses the real dt; only the uncertainty is bounded. */
+	if (t > 0.05)
+		t = 0.05;
+
 	FLT t2 = t * t;
 	FLT t3 = t2 * t;
 	FLT t4 = t3 * t;

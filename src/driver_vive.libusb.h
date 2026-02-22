@@ -213,24 +213,38 @@ static void handle_transfer(struct libusb_transfer *transfer) {
 	SurviveUSBInterface *iface = transfer->user_data;
 	SurviveContext *ctx = iface->ctx;
 	if (!iface->shutdown && transfer->status == LIBUSB_TRANSFER_TIMED_OUT) {
-        iface->consecutive_timeouts++;
-        if(iface->consecutive_timeouts >= 3) {
-            SV_WARN("%f %s Device turned off: %d", survive_run_time(ctx), survive_colorize_codename(iface->assoc_obj),
-                    transfer->status);
-            goto object_turned_off;
-        } else {
-            return;
-        }
-	}
-
-	if (!iface->shutdown && transfer->status != LIBUSB_TRANSFER_COMPLETED) {
-		SV_WARN("%f %s Device disconnect: %d", survive_run_time(ctx), survive_colorize_codename(iface->assoc_obj),
-				transfer->status);
-		iface->error_count++;
-		if (iface->error_count++ < 10) {
+		iface->consecutive_timeouts++;
+		if (iface->consecutive_timeouts >= 10) {
+			SV_WARN("%f %s Device turned off: %d", survive_run_time(ctx),
+					survive_colorize_codename(iface->assoc_obj), transfer->status);
+			goto object_turned_off;
+		} else {
+			/* Always resubmit after timeout — the original code just returned,
+			 * silently abandoning the transfer so the endpoint never received
+			 * data again. */
 			if (libusb_submit_transfer(transfer)) {
 				goto shutdown;
 			}
+			return;
+		}
+	}
+
+	if (!iface->shutdown && transfer->status != LIBUSB_TRANSFER_COMPLETED) {
+		SV_WARN("%f %s Device error on EP 0x%02x: %d (%s)", survive_run_time(ctx),
+				survive_colorize_codename(iface->assoc_obj), transfer->endpoint,
+				transfer->status, libusb_error_name(transfer->status));
+
+		/* Clear endpoint halt/stall condition before retrying */
+		if (transfer->status == LIBUSB_TRANSFER_STALL) {
+			libusb_clear_halt(iface->usbInfo->handle, transfer->endpoint);
+		}
+
+		iface->error_count++;
+		if (iface->error_count < 10) {
+			if (libusb_submit_transfer(transfer)) {
+				goto shutdown;
+			}
+			return; /* Successfully resubmitted — don't disconnect */
 		}
 
 		goto disconnect;
