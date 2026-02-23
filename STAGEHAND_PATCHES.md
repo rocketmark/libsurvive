@@ -4,11 +4,15 @@ This fork ([rocketmark/libsurvive](https://github.com/rocketmark/libsurvive)) tr
 
 These patches fix bugs discovered while running libsurvive headless on a Pi with a single Vive Tracker 3 over USB (no wireless dongle, no HMD).
 
+## Current State
+
+**Patches #2–7 were reverted to upstream** after the combined patches broke cold start calibration (the agent's init timeout killed libsurvive before the Global Scene Solver could complete). Only patch #1 (clear_halt on attach) and #8 (compiler warning) are currently applied. The bugs described in #2–7 are real and confirmed — they need to be re-applied one at a time with cold start testing between each.
+
 ## Bug Fix Patches
 
-### 1. Clear stalled endpoints on attach (`driver_vive.c`)
+### 1. Clear stalled endpoints on attach (`driver_vive.c`) — APPLIED
 
-**Commit:** not yet committed to fork (applied via `stagehand/agent/patches/clear_halt.patch`)
+**Status:** Applied in fork via `clear_halt.patch`.
 
 On Linux, the kernel `usbhid` driver grabs tracker interfaces on plug-in. libsurvive auto-detaches it with `libusb_set_auto_detach_kernel_driver()`, but the IMU endpoint (0x81) can be left in a STALL state after detach. Without IMU data the Kalman filter never produces poses.
 
@@ -17,53 +21,41 @@ On Linux, the kernel `usbhid` driver grabs tracker interfaces on plug-in. libsur
 libusb_clear_halt(devh, endpoint_num);
 ```
 
-**Status:** Tracked as a `.patch` file in stagehand, not yet rolled into this fork.
+### 2. Transfer timeout handler silently abandons endpoint (`driver_vive.libusb.h`) — REVERTED
 
-### 2. Transfer timeout handler silently abandons endpoint (`driver_vive.libusb.h`)
+When `handle_transfer()` receives `LIBUSB_TRANSFER_TIMED_OUT`, upstream returns without resubmitting the transfer. The endpoint permanently stops receiving data — no warning, no recovery. This is the primary cause of tracking dying after 1-6 minutes over USB/IP.
 
-**Commit:** 9dc326d
+**Planned fix:** Always resubmit after timeout. Declare "device turned off" only after 10 consecutive timeouts (10 seconds of silence).
 
-When `handle_transfer()` received `LIBUSB_TRANSFER_TIMED_OUT`, the original code returned without resubmitting the transfer. The endpoint permanently stopped receiving data — no warning, no recovery. This is the primary cause of tracking dying after 1-6 minutes over USB/IP.
+### 3. Transfer error handler double-increments and falls through (`driver_vive.libusb.h`) — REVERTED
 
-**Fix:** Always resubmit after timeout. Declare "device turned off" only after 10 consecutive timeouts (10 seconds of silence).
+The upstream error path has two bugs:
+- `error_count++` appears twice on the same path (`error_count++` then `if (error_count++ < 10)`)
+- After a successful `libusb_submit_transfer()` retry, the code falls through to `goto disconnect` instead of returning
 
-### 3. Transfer error handler double-increments and falls through (`driver_vive.libusb.h`)
+**Planned fix:** Single increment, `return` after successful resubmit, `goto disconnect` only after 10 consecutive errors.
 
-**Commit:** 9dc326d
+### 4. No `libusb_clear_halt()` on STALL errors (`driver_vive.libusb.h`) — REVERTED
 
-The error path had two bugs:
-- `error_count++` appeared twice on the same path (`error_count++` then `if (error_count++ < 10)`)
-- After a successful `libusb_submit_transfer()` retry, the code fell through to `goto disconnect` instead of returning
+When a transfer completes with `LIBUSB_TRANSFER_STALL`, upstream retries without clearing the halt condition — so the retry also stalls.
 
-**Fix:** Single increment, `return` after successful resubmit, `goto disconnect` only after 10 consecutive errors.
+**Planned fix:** Call `libusb_clear_halt()` before retrying when `transfer->status == LIBUSB_TRANSFER_STALL`.
 
-### 4. No `libusb_clear_halt()` on STALL errors (`driver_vive.libusb.h`)
+### 5. Global scene solver off-by-one allows extra solve (`driver_global_scene_solver.c`) — REVERTED
 
-**Commit:** 9dc326d
+`run_optimization()` and `check_object()` use `solve_counts > solve_count_max` which allows N+1 solves instead of N. The 2nd solve (at ~7 minutes) incorporated a bad scene, causing the MPFIT error to jump from 68 to 4661 (68x), corrupting lighthouse positions and killing tracking permanently.
 
-When a transfer completed with `LIBUSB_TRANSFER_STALL`, libsurvive retried without clearing the halt condition — so the retry would also stall.
+**Planned fix:** Change to `solve_counts >= solve_count_max` in both locations.
 
-**Fix:** Call `libusb_clear_halt()` before retrying when `transfer->status == LIBUSB_TRANSFER_STALL`.
+### 6. Global scene solver flag=1 means unlimited (`driver_global_scene_solver.c`) — REVERTED
 
-### 5. Global scene solver off-by-one allows extra solve (`driver_global_scene_solver.c`)
+The upstream flag mapping `flag > 1 ? flag : -1` makes `--globalscenesolver 1` set `solve_count_max = -1` (unlimited). Only values >= 2 are respected as actual limits.
 
-**Commit:** 9dc326d
+**Planned fix:** Change to `flag > 0 ? flag : -1` so `--globalscenesolver 1` means exactly 1 solve (initial calibration only).
 
-`run_optimization()` and `check_object()` used `solve_counts > solve_count_max` which allowed N+1 solves instead of N. The 2nd solve (at ~7 minutes) incorporated a bad scene, causing the MPFIT error to jump from 68 to 4661 (68x), corrupting lighthouse positions and killing tracking permanently.
+**Note:** With upstream code, `--globalscenesolver 3` passes through correctly (flag > 1 → flag = 3). The wrapper now uses `--globalscenesolver 3` to avoid this issue.
 
-**Fix:** Changed to `solve_counts >= solve_count_max` in both locations.
-
-### 6. Global scene solver flag=1 means unlimited (`driver_global_scene_solver.c`)
-
-**Commit:** 9dc326d
-
-The flag mapping `flag > 1 ? flag : -1` made `--globalscenesolver 1` set `solve_count_max = -1` (unlimited). Only values >= 2 were respected as actual limits.
-
-**Fix:** Changed to `flag > 0 ? flag : -1` so `--globalscenesolver 1` means exactly 1 solve (initial calibration only).
-
-### 7. Process noise t^7 explosion on IMU timing gaps (`survive_kalman_tracker.c`)
-
-**Commit:** 9dc326d
+### 7. Process noise t^7 explosion on IMU timing gaps (`survive_kalman_tracker.c`) — REVERTED
 
 The jerk-model process noise scales as t^7. libsurvive warns at dt > 500ms but does not cap dt. Over USB/IP, IMU timestamp gaps cause catastrophic P matrix growth:
 
@@ -75,11 +67,11 @@ The jerk-model process noise scales as t^7. libsurvive warns at dt > 500ms but d
 | 500ms | 0.008 | light gate triggers |
 | 1s | 1.0 | NaN/Inf in filter |
 
-Proved by assertion failure: `variance.h:18: variance_measure_add: Assertion 'isfinite(d[i])' failed.`
+**Confirmed:** NaN assertion crash observed on cold start: `linmath.c:658: quatrotateabout: Assertion '!isnan(qout[i])' failed`. This is the highest priority patch to re-apply.
 
-**Fix:** Cap `t` to 50ms at the top of `survive_kalman_tracker_process_noise()`. State prediction still uses the real dt; only uncertainty growth (Q matrix) is bounded.
+**Planned fix:** Cap `t` to 50ms at the top of `survive_kalman_tracker_process_noise()`. State prediction still uses the real dt; only uncertainty growth (Q matrix) is bounded.
 
-### 8. Compiler warning fix (`survive_sensor_activations.c`)
+### 8. Compiler warning fix (`survive_sensor_activations.c`) — APPLIED
 
 **Commit:** 1d34e73
 
@@ -110,18 +102,29 @@ Upstream CI workflows (cmake, docker, nuget, wheels, publish-source) were remove
 
 ## Patch Status
 
-| # | Patch | In fork? | In `clear_halt.patch`? | Upstream PR? |
-|---|-------|----------|----------------------|--------------|
-| 1 | Clear halt on attach | **NO** | YES | No |
-| 2 | Timeout resubmit | YES | No | No |
-| 3 | Error handler fix | YES | No | No |
-| 4 | STALL clear_halt | YES | No | No |
-| 5 | GSS off-by-one | YES | No | No |
-| 6 | GSS flag mapping | YES | No | No |
-| 7 | Process noise dt cap | YES | No | No |
-| 8 | Compiler warning | YES | No | No |
+| # | Patch | Applied? | Confirmed? | Re-apply priority |
+|---|-------|----------|------------|-------------------|
+| 1 | Clear halt on attach | YES | YES | — |
+| 2 | Timeout resubmit | **REVERTED** | YES (1-6 min dropout) | 2 |
+| 3 | Error handler fix | **REVERTED** | YES (code review) | 2 (same file as #2) |
+| 4 | STALL clear_halt | **REVERTED** | YES (code review) | 2 (same file as #2) |
+| 5 | GSS off-by-one | **REVERTED** | YES (7-min corruption) | 3 |
+| 6 | GSS flag mapping | **REVERTED** | Mitigated (wrapper uses 3) | 3 (same file as #5) |
+| 7 | Process noise dt cap | **REVERTED** | YES (NaN crash on cold start) | **1 — highest** |
+| 8 | Compiler warning | YES | YES | — |
 
-**Known gap:** Patch #1 (clear halt on attach) exists only in `stagehand/agent/patches/clear_halt.patch` and is applied manually on the Pi. It should be committed to this fork so the fork is the single source of truth.
+## Re-apply Order
+
+Patches should be re-applied one at a time. After each patch, deploy to Pi and verify cold start calibration still succeeds (both lighthouses detected, OOTX decoded, GSS solves, tracking goes green).
+
+1. **Patch #7** (dt cap) — prevents NaN crash on cold start, confirmed by assertion failure
+2. **Patches #2–4** (USB transfer handler) — prevents 1-6 minute dropout over USB/IP
+3. **Patches #5–6** (GSS) — prevents 7-minute re-solve corruption
+
+## Lessons Learned
+
+- **Cold start calibration is fast (~20s)** when it works: OOTX decode takes ~18s, GSS solves in ~1s after that. The stuck-yellow failures were caused by the agent's 120s init timeout and the NaN crash, not slow calibration.
+- **Test patches in isolation.** When multiple patches interact (GSS flag mapping + agent init timeout + NaN crash), failures are hard to attribute.
 
 ## Build
 
@@ -140,4 +143,4 @@ ctest --output-on-failure
 
 ## Runtime
 
-The stagehand agent wrapper passes `--globalscenesolver 1` by default, which requires patches #5 and #6 to work correctly.
+The stagehand agent wrapper passes `--globalscenesolver 3` by default. With upstream GSS code (patches #5–6 reverted), this correctly limits to 3 solves. With patches #5–6 applied, any value >= 1 works as expected.
