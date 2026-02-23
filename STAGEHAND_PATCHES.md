@@ -6,7 +6,13 @@ These patches fix bugs discovered while running libsurvive headless on a Pi with
 
 ## Current State
 
-**Patches #2–7 were reverted to upstream** after the combined patches broke cold start calibration (the agent's init timeout killed libsurvive before the Global Scene Solver could complete). Only patch #1 (clear_halt on attach) and #8 (compiler warning) are currently applied. The bugs described in #2–7 are real and confirmed — they need to be re-applied one at a time with cold start testing between each.
+Patches #1, #7, #2, #3, #4, and #8 are applied. Patches #5 and #6 (GSS off-by-one and
+flag mapping) remain reverted — the wrapper's `--globalscenesolver 3` mitigates #6.
+
+**Feb 2026 diagnostic confirmation:** Instrumented agent (imu_age logging) confirmed
+that the dropout is USB-level: IMU stops first (~4 min), poses stop ~30s later (Kalman
+coasting). Patch #7 was re-applied first (NaN crash on cold start), then #2-4 (endpoint
+abandonment on timeout). Cold start must be re-verified after each deploy.
 
 ## Bug Fix Patches
 
@@ -105,12 +111,12 @@ Upstream CI workflows (cmake, docker, nuget, wheels, publish-source) were remove
 | # | Patch | Applied? | Confirmed? | Re-apply priority |
 |---|-------|----------|------------|-------------------|
 | 1 | Clear halt on attach | YES | YES | — |
-| 2 | Timeout resubmit | **REVERTED** | YES (1-6 min dropout) | 2 |
-| 3 | Error handler fix | **REVERTED** | YES (code review) | 2 (same file as #2) |
-| 4 | STALL clear_halt | **REVERTED** | YES (code review) | 2 (same file as #2) |
-| 5 | GSS off-by-one | **REVERTED** | YES (7-min corruption) | 3 |
-| 6 | GSS flag mapping | **REVERTED** | Mitigated (wrapper uses 3) | 3 (same file as #5) |
-| 7 | Process noise dt cap | **REVERTED** | YES (NaN crash on cold start) | **1 — highest** |
+| 2 | Timeout resubmit | **APPLIED** | YES (1-6 min dropout) | — |
+| 3 | Error handler fix | **APPLIED** | YES (code review) | — |
+| 4 | STALL clear_halt | **APPLIED** | YES (code review) | — |
+| 5 | GSS off-by-one | **REVERTED** | Confirmed corruption 60→15198→963755/meas; patch broke tracking, needs investigation | investigate |
+| 6 | GSS flag mapping | **REVERTED** | flag=1 broke tracking (OOTX stuck); needs investigation | investigate |
+| 7 | Process noise dt cap | **APPLIED** | YES (NaN crash on cold start) | — |
 | 8 | Compiler warning | YES | YES | — |
 
 ## Re-apply Order

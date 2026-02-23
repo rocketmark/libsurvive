@@ -212,27 +212,46 @@ static void handle_transfer(struct libusb_transfer *transfer) {
 
 	SurviveUSBInterface *iface = transfer->user_data;
 	SurviveContext *ctx = iface->ctx;
+	/* Stagehand patch #2: Resubmit on timeout; only abandon after 10 consecutive
+	 * timeouts (~10s with 1000ms timeout). Upstream returned without resubmitting,
+	 * permanently silencing the endpoint — the primary cause of 1-6 min dropout.
+	 *
+	 * On final timeout, call _exit(1) instead of any USB cleanup. The disconnect
+	 * path has a race: survive_disconnect_device() nulls iface->ctx on all
+	 * interfaces, then a concurrent callback on another interface calls
+	 * survive_run_time(ctx) with the now-null ctx and SEGVs — causing Pi freeze.
+	 * _exit() bypasses all cleanup; the OS frees USB handles safely, and systemd
+	 * restarts the agent cleanly. */
 	if (!iface->shutdown && transfer->status == LIBUSB_TRANSFER_TIMED_OUT) {
-        iface->consecutive_timeouts++;
-        if(iface->consecutive_timeouts >= 3) {
-            SV_WARN("%f %s Device turned off: %d", survive_run_time(ctx), survive_colorize_codename(iface->assoc_obj),
-                    transfer->status);
-            goto object_turned_off;
-        } else {
-            return;
-        }
+		iface->consecutive_timeouts++;
+		if (iface->consecutive_timeouts >= 10) {
+			fprintf(stderr, "[libsurvive] USB endpoint silent for 10s, exiting for restart\n");
+			_exit(1);
+		}
+		if (libusb_submit_transfer(transfer)) {
+			goto shutdown;
+		}
+		return;
 	}
 
+	/* Stagehand patches #3 and #4:
+	 * #3: Single error_count increment (upstream double-incremented) and return
+	 *     after successful resubmit (upstream fell through to goto disconnect).
+	 * #4: Call libusb_clear_halt() on STALL before retry — without this, retrying
+	 *     a stalled endpoint is guaranteed to stall again. */
 	if (!iface->shutdown && transfer->status != LIBUSB_TRANSFER_COMPLETED) {
 		SV_WARN("%f %s Device disconnect: %d", survive_run_time(ctx), survive_colorize_codename(iface->assoc_obj),
 				transfer->status);
+		if (transfer->status == LIBUSB_TRANSFER_STALL) {
+			libusb_clear_halt(iface->usbInfo->handle, transfer->endpoint);
+		}
 		iface->error_count++;
-		if (iface->error_count++ < 10) {
+		if (iface->error_count < 10) {
 			if (libusb_submit_transfer(transfer)) {
 				goto shutdown;
 			}
+			return;
 		}
-
 		goto disconnect;
 	}
 
