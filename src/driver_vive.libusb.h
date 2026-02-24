@@ -221,11 +221,25 @@ static void handle_transfer(struct libusb_transfer *transfer) {
 	 * interfaces, then a concurrent callback on another interface calls
 	 * survive_run_time(ctx) with the now-null ctx and SEGVs — causing Pi freeze.
 	 * _exit() bypasses all cleanup; the OS frees USB handles safely, and systemd
-	 * restarts the agent cleanly. */
+	 * restarts the agent cleanly.
+	 *
+	 * Buttons endpoint (EP 0x84) exclusion: the tracker sends a ~10s status
+	 * heartbeat on the Buttons interface even when no buttons are pressed. With a
+	 * 1000ms transfer timeout, consecutive_timeouts reaches 9 between each heartbeat
+	 * and resets when the heartbeat arrives. If the heartbeat is even 1 second late,
+	 * the count hits 10 and fires a false _exit(1). Buttons data is not required for
+	 * tracking; only IMU (0x81) and Lightcap (0x83) trigger the exit. */
 	if (!iface->shutdown && transfer->status == LIBUSB_TRANSFER_TIMED_OUT) {
 		iface->consecutive_timeouts++;
-		if (iface->consecutive_timeouts >= 10) {
-			fprintf(stderr, "[libsurvive] USB endpoint silent for 10s, exiting for restart\n");
+		bool is_tracking_ep = (transfer->endpoint != 0x84);
+		if (is_tracking_ep && iface->consecutive_timeouts == 1) {
+			fprintf(stderr, "[libsurvive] USB timeout #1 on if=%d %s ep=0x%02x\n",
+				iface->which_interface_am_i, iface->hname, transfer->endpoint);
+		}
+		if (is_tracking_ep && iface->consecutive_timeouts >= 10) {
+			fprintf(stderr, "[libsurvive] USB endpoint silent for 10s, exiting for restart"
+				" (if=%d %s ep=0x%02x)\n",
+				iface->which_interface_am_i, iface->hname, transfer->endpoint);
 			_exit(1);
 		}
 		if (libusb_submit_transfer(transfer)) {
