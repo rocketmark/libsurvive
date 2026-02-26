@@ -3109,8 +3109,8 @@ void survive_data_cb_locked(uint64_t time_received_us, SurviveUSBInterface *si) 
 		} else if (id == VIVE_REPORT_USB_TRACKER_LIGHTCAP_V1) {
 			SV_INFO("USB lightcap report is of an unexpected type for %s: %d (0x%02x)", obj->codename, id, id);
 		} else {
-			SV_ERROR(SURVIVE_ERROR_HARWARE_FAULT, "USB lightcap report is of an unknown type for %s: %d (0x%02x)",
-					 obj->codename, id, id);
+			SV_WARN("USB lightcap report is of an unknown type for %s: %d (0x%02x); ignoring",
+					obj->codename, id, id);
 		}
 
 		break;

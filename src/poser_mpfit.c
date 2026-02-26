@@ -187,6 +187,15 @@ static size_t construct_input_from_scene(const MPFITData *d, survive_long_timeco
 				if (isReadingValue) {
 					const FLT *a = scene->angles[sensor][lh];
 
+					if (!isfinite(a[axis])) {
+						static int warned = 0;
+						if (!warned) {
+							fprintf(stderr, "[libsurvive WARN] poser_mpfit: NaN optical angle sensor %d lh %d axis %d; suppressing further\n", (int)sensor, (int)lh, (int)axis);
+							warned = 1;
+						}
+						continue;
+					}
+
 					survive_optimizer_measurement *meas =
 						survive_optimizer_emplace_meas(mpfitctx, survive_optimizer_measurement_type_light);
 
@@ -519,7 +528,7 @@ static FLT handle_optimizer_results(survive_optimizer *mpfitctx, int res, const 
 	FLT meas_f = mpfitctx->measurementsCnt;
 	SV_DATA_LOG("mpfit_measurement_cnt", &meas_f, 1);
 
-	bool status_failure = res <= 0;
+	bool status_failure = res <= 0 || res == MP_MAXITER;
 	if (status_failure) {
 		SV_WARN("MPFIT status failure %s %f/%f (%d measurements, %d)", survive_colorize(so->codename), result->orignorm,
 				result->bestnorm, (int)meas_size, res);
