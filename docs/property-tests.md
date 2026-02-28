@@ -180,3 +180,14 @@ ctest --output-on-failure
 ```
 
 Tests also run automatically in CI (`ci-property-tests.yml`) on every push and PR. Under ASan/UBSan, the random inputs also catch undefined behavior and memory errors.
+
+## Limitations
+
+These tests cover pure math and in-process logic. They do not substitute for hardware-in-the-loop testing of:
+
+- **Lighthouse sweep synchronization** — timing relationships between sweep pulses depend on actual base station hardware and USB interrupt scheduling.
+- **USB enumeration order** — which interface gets opened first (IMU vs. Lightcap) is determined by the kernel USB stack, not by libsurvive logic.
+- **Kalman update behavior** — only the `predict` step is tested here; the `update` path requires real sensor observations with realistic noise characteristics.
+- **Pose dropout under load** — long-duration stability issues are caused by the interaction of Kalman covariance growth, the reporting gate, and real sensor timing jitter — none of which can be driven by synthetic random inputs alone.
+
+These scenarios require physical trackers, base stations, and logged field data to reproduce and verify.
