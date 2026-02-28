@@ -109,7 +109,7 @@ Fuzz math functions with adversarial and degenerate inputs to verify no crashes 
 | `KabschCoplanar` | Kabsch with coplanar points doesn't crash, produces finite pose (rotation underdetermined around normal axis) |
 | `LargeQuatNoOverflow` | `quatrotatevector` with very large quaternion components doesn't overflow |
 
-No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash). Callers that may receive zero-magnitude input — including the stagehand agent integration — must guard against NaN propagation at their own boundary; that is outside the scope of these tests.
+No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash). Callers that may receive zero-magnitude input, including the stagehand agent integration, must guard against NaN propagation at their own boundary; that is outside the scope of these tests.
 
 ### 6. Reprojection Residual / BSVD Pose Solver (`reproject_residual_props.c`)
 
