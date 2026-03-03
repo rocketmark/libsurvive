@@ -170,6 +170,25 @@ static int survive_open_usb_device(SurviveViveData *sv, survive_usb_device_t d, 
 		goto cleanup_and_rtn;
 	}
 
+	/* Reset the USB device before claiming interfaces.  When the agent
+	 * exits via _exit(99) (survive_simple_close hang watchdog), pending
+	 * interrupt IN URBs on endpoint 0x83 (Lightcap) may be left in a
+	 * stale state that libusb_clear_halt() alone cannot recover.
+	 * libusb_reset_device() sends a USB-wire reset signal — the device
+	 * firmware is NOT power-cycled, so it avoids the cold-boot 0xca
+	 * report burst — but clears all endpoint state so the subsequent
+	 * clear_halt + submit_transfer starts clean.
+	 * Non-fatal: if reset fails (e.g. device temporarily disconnected)
+	 * we log a warning and continue; clear_halt handles normal cases. */
+	{
+		int reset_ret = libusb_reset_device(usbInfo->handle);
+		if (reset_ret != 0) {
+			SV_WARN("USB reset failed for %s (%04x:%04x): %d (%s) — continuing",
+					survive_colorize(info->name), idVendor, idProduct,
+					reset_ret, libusb_error_name(reset_ret));
+		}
+	}
+
 	libusb_set_auto_detach_kernel_driver(usbInfo->handle, 1);
 	for (int j = 0; j < conf->bNumInterfaces; j++) {
 		bool interface_is_microphone = false;
