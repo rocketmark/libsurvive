@@ -392,7 +392,10 @@ TEST(QuatProps, SlerpBoundaries) {
 // These tests verify that quatdist has the invariants the gate relies on.
 
 // 12. quatdist(q, q) == 0 for all unit quaternions
-//     The gate must never fire when the tracker is perfectly stationary.
+//     Sanity check only — dot(q, q) = 1 for unit quaternions so acos(1) = 0
+//     is mathematically guaranteed. Note: this test passed even before the
+//     clamp bug was fixed (the bug made quatdist always return 0). It would
+//     not catch a regression to the broken implementation.
 TEST(QuatProps, QuatDistSelfIsZero) {
 	unsigned seed = (unsigned)time(NULL);
 	srand(seed);
@@ -413,7 +416,9 @@ TEST(QuatProps, QuatDistSelfIsZero) {
 }
 
 // 13. quatdist is symmetric: quatdist(q1, q2) == quatdist(q2, q1)
-//     The angular rate is the same regardless of which direction the rotation went.
+//     Sanity check only — symmetry follows from |dot(q1,q2)| = |dot(q2,q1)|,
+//     which holds for any dot product implementation. Would not catch the
+//     clamp bug (bug returned 0 for both directions → still symmetric).
 TEST(QuatProps, QuatDistSymmetric) {
 	unsigned seed = (unsigned)time(NULL);
 	srand(seed);
@@ -435,8 +440,10 @@ TEST(QuatProps, QuatDistSymmetric) {
 }
 
 // 14. quatdist is non-negative and bounded by pi
-//     Non-negative: dividing by dt must produce a non-negative rate.
-//     Bounded by pi: values above pi would indicate a bug in the distance function.
+//     Sanity check only — 2*acos(|dot|) is always in [0, π] for unit quaternions
+//     regardless of implementation. Would not catch the clamp bug (bug returned
+//     0 which is trivially in [0, π]).
+//     QuatDistKnownAngle is the test that provides real regression protection.
 TEST(QuatProps, QuatDistNonNegativeAndBounded) {
 	unsigned seed = (unsigned)time(NULL);
 	srand(seed);

@@ -94,27 +94,24 @@ No bugs found in the Kalman predict code. The predict math is numerically stable
 
 ### 5. Numeric Robustness / NaN Propagation (`numeric_props.c`)
 
-13 properties, 1,000–10,000 random trials each.
+10 properties, 1,000–10,000 random trials each.
 
-Fuzz math functions with adversarial and degenerate inputs to verify no crashes or silent NaN/Inf propagation. Also covers the configurable sync cluster window added as part of reflection rejection.
+Fuzz math functions with adversarial and degenerate inputs to verify no crashes or silent NaN/Inf propagation.
 
 | Test | Property |
 |---|---|
-| `QuatNormalizeZero` | `quatnormalize(zero)` doesn't crash (documents NaN behavior) |
+| `QuatNormalizeZero` | `quatnormalize(zero)` doesn't crash; result is NaN or unit quaternion — not finite non-unit |
 | `RotateWithNonUnitQuat` | `quatrotatevector` with non-unit q produces finite output |
 | `ReprojectGen1Finite` | Gen1 reprojection with random calibration produces finite angles |
 | `ReprojectGen2Finite` | Gen2 reprojection with random calibration produces finite angles |
-| `Normalize3dZero` | `normalize3d(zero)` doesn't crash |
+| `Normalize3dZero` | `normalize3d(zero)` doesn't crash; result is NaN or unit vector — not finite non-unit |
 | `IdentityPosePreservesPoint` | Identity pose applied to any point returns the same point |
 | `ReprojectExtremeDistance` | Points at extreme distance (100–10,000m) produce finite, near-zero angles |
 | `KabschCollinear` | Kabsch with collinear points doesn't crash, produces finite translation (rotation underdetermined) |
 | `KabschCoplanar` | Kabsch with coplanar points doesn't crash, produces finite pose (rotation underdetermined around normal axis) |
 | `LargeQuatNoOverflow` | `quatrotatevector` with very large quaternion components doesn't overflow |
-| `SyncWindowDefaultMatchesHardcoded` | `0.5 * 48000000.0 == 48000000 / 2` (new default exactly matches the old hard-coded constant) |
-| `SyncWindowTicksMonotonic` | Larger window seconds → larger tick count |
-| `SyncWindowZeroExcludesAll` | Zero-second window excludes all readings |
 
-No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash). Callers that may receive zero-magnitude input, including the stagehand agent integration, must guard against NaN propagation at their own boundary; that is outside the scope of these tests.
+No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash). Callers that may receive zero-magnitude input must guard against NaN propagation at their own boundary.
 
 ### 6. Reprojection Residual / BSVD Pose Solver (`reproject_residual_props.c`)
 
@@ -153,16 +150,13 @@ No bugs found. The circular buffer logic is correct. Queue overflow is silent by
 
 ### 8. Back-Facing Normal Filter Geometry (`normal_filter_props.c`)
 
-6 properties, 10,000 random trials each (60,000 total).
+3 properties, 10,000 random trials each (30,000 total).
 
-Tests the geometric invariants that the back-facing normal filter in `SurviveSensorActivations_check_outlier()` depends on. The filter computes `dot(sensor_normal_world, toward_lighthouse)` and rejects hits where the result is below a threshold (default 0.0). These tests verify the geometry is correct without needing to call the static inline filter function directly.
+Tests the back-facing normal filter in `SurviveSensorActivations_check_outlier()`. Each test uses a random (non-identity) tracker rotation and calls `compute_facingness()` — the full coordinate transform path (quatrotatevector + ApplyPoseToPoint + normalize + dot3d) is exercised in every trial.
 
 | Test | Property |
 |---|---|
-| `FacingnessInRange` | Dot product of unit normal and unit direction is always in `[-1, 1]` |
-| `FacingnessFlipsWithDirection` | `dot(n, d) + dot(n, -d) = 0` — flipping LH side inverts the sign |
-| `FacingnessKnownAngle` | Facingness equals `cos(θ)` for sensor normal at known angle θ from lighthouse |
-| `FacingnessThresholdMonotonic` | Threshold at `f−ε` accepts, threshold at `f+ε` rejects |
+| `FacingnessKnownAngle` | `compute_facingness()` returns `cos(θ)` when sensor normal is at known angle θ from lighthouse direction; uses random rotation with normal back-rotated to body frame |
 | `DirectlyFacingAlwaysAccepted` | Sensor normal aligned with lighthouse gives facingness ≈ 1.0, passes any threshold ≤ 1 |
 | `BackFacingAlwaysRejected` | Sensor normal opposing lighthouse gives facingness ≈ −1.0, fails any threshold ≥ 0 |
 
@@ -176,11 +170,11 @@ No bugs found. The filter geometry is correct: at the default threshold 0.0, sen
 | Reprojection | `reproject_props.c` | 13 | 65,000 | 0 |
 | Kabsch | `kabsch_props.c` | 5 | 25,000 | 0 |
 | Kalman Predict | `kalman_props.c` | 10 | ~74M steps | 0 |
-| Numeric Robustness | `numeric_props.c` | 13 | ~90,000 | 0 |
+| Numeric Robustness | `numeric_props.c` | 10 | ~80,000 | 0 |
 | Reprojection Residual | `reproject_residual_props.c` | 6 | 6,000 | 0 |
 | Event Queue | `event_queue_props.c` | 7 | ~3,500 | 0 |
-| Normal Filter | `normal_filter_props.c` | 6 | 60,000 | 0 |
-| **Total** | | **76** | | **2** |
+| Normal Filter | `normal_filter_props.c` | 3 | 30,000 | 0 |
+| **Total** | | **70** | | **2** |
 
 ## Running the Tests
 

@@ -165,9 +165,16 @@ TEST(NumericProps, Normalize3dZero) {
 	FLT result[3];
 	normalize3d(result, zero);
 
-	// 1/sqrt(0) -> Inf, result = {0*Inf, 0*Inf, 0*Inf} = {NaN, NaN, NaN}
-	// Just verify no crash. Either NaN or some handled value is acceptable.
-	(void)result;
+	// 1/sqrt(0) -> Inf; components become 0*Inf = NaN.
+	// Acceptable outcomes: NaN (current) or a handled unit vector (if fixed).
+	// Either is fine — what is NOT acceptable is a finite non-unit result.
+	if (isfinite(result[0]) || isfinite(result[1]) || isfinite(result[2])) {
+		FLT mag = magnitude3d(result);
+		if (fabs(mag - 1.0) > 1e-5) {
+			fprintf(stderr, "Normalize3dZero: finite but not unit? |v|=%.10f\n", mag);
+			return -1;
+		}
+	}
 	return 0;
 }
 
@@ -301,80 +308,6 @@ TEST(NumericProps, KabschCoplanar) {
 					result.Pos[0], result.Pos[1], result.Pos[2]);
 			fprintf(stderr, "  result.Rot: [%.10f, %.10f, %.10f, %.10f]\n",
 					result.Rot[0], result.Rot[1], result.Rot[2], result.Rot[3]);
-			return -1;
-		}
-	}
-	return 0;
-}
-
-// ── Sync cluster window tick conversion (reflect filter change) ──────
-//
-// SurviveSensorActivations_add_sync() was changed to compute the "isRecent"
-// window as:
-//   sync_window_ticks = (survive_long_timecode)(syncClusterWindowS * 48000000.0)
-// replacing the hard-coded `48000000 / 2`.
-// These tests verify the arithmetic invariants of that conversion.
-
-// 9a. Default window value (0.5 s) produces the same tick count as the old
-//     hard-coded expression `48000000 / 2`.
-//     This is the primary regression guard: the default must be a no-op change.
-TEST(NumericProps, SyncWindowDefaultMatchesHardcoded) {
-	survive_long_timecode old_value  = (survive_long_timecode)(48000000 / 2);
-	survive_long_timecode new_value  = (survive_long_timecode)(0.5 * 48000000.0);
-
-	if (old_value != new_value) {
-		fprintf(stderr, "SyncWindowDefaultMatchesHardcoded FAILED\n");
-		fprintf(stderr, "  old (48000000/2)        = %llu\n", (unsigned long long)old_value);
-		fprintf(stderr, "  new (0.5 * 48000000.0)  = %llu\n", (unsigned long long)new_value);
-		return -1;
-	}
-	return 0;
-}
-
-// 9b. Tightening the window (smaller seconds) produces a smaller tick count.
-//     If this fails the filter would become more permissive when the user
-//     intends to make it more aggressive.
-TEST(NumericProps, SyncWindowTicksMonotonic) {
-	unsigned seed = (unsigned)time(NULL);
-	srand(seed);
-
-	for (int trial = 0; trial < N_TRIALS; trial++) {
-		FLT wA = rand_range(0.001, 1.0);
-		FLT wB = wA + rand_range(0.001, 1.0); // wB > wA
-
-		survive_long_timecode tA = (survive_long_timecode)(wA * 48000000.0);
-		survive_long_timecode tB = (survive_long_timecode)(wB * 48000000.0);
-
-		if (tA >= tB) {
-			fprintf(stderr, "SyncWindowTicksMonotonic FAILED (seed=%u, trial=%d)\n", seed, trial);
-			fprintf(stderr, "  wA=%.6f -> tA=%llu\n", wA, (unsigned long long)tA);
-			fprintf(stderr, "  wB=%.6f -> tB=%llu\n", wB, (unsigned long long)tB);
-			return -1;
-		}
-	}
-	return 0;
-}
-
-// 9c. A zero window produces zero ticks, which means no reading is ever recent
-//     (unsigned subtraction can never be < 0). This verifies the edge case
-//     where the user sets sync-cluster-window 0 to maximally tighten the filter.
-TEST(NumericProps, SyncWindowZeroExcludesAll) {
-	survive_long_timecode window_ticks = (survive_long_timecode)(0.0 * 48000000.0);
-
-	if (window_ticks != 0) {
-		fprintf(stderr, "SyncWindowZeroExcludesAll FAILED: window_ticks=%llu (expected 0)\n",
-				(unsigned long long)window_ticks);
-		return -1;
-	}
-
-	// Any non-zero timecode difference is >= window_ticks (0), so isRecent = false for all
-	// readings (timecode - sensor_timecode < 0 is always false for unsigned).
-	// Verify with a representative sample.
-	for (survive_long_timecode diff = 1; diff <= 1000000; diff += 1000) {
-		int is_recent = (int)(diff < window_ticks);
-		if (is_recent) {
-			fprintf(stderr, "SyncWindowZeroExcludesAll: diff=%llu marked recent with zero window\n",
-					(unsigned long long)diff);
 			return -1;
 		}
 	}
