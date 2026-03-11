@@ -63,6 +63,9 @@ typedef struct SurviveSensorActivations_s {
 		FLT filterOutlierCriteria;
 		FLT filterVarianceMin;
 		int filterOutlierMinCount;
+		FLT filterNormalFacingness;    // min dot product (sensor normal vs direction-to-lh); < -0.5 disables
+		FLT filterNormalMinConfidence; // min pose confidence before normal filter activates
+		FLT syncClusterWindowS;        // time window for sync cluster calculation in seconds
 	} params;
 } SurviveSensorActivations;
 

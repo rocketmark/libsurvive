@@ -28,6 +28,9 @@
 STRUCT_CONFIG_SECTION(SurviveKalmanTracker)
 	STRUCT_CONFIG_ITEM("light-error-threshold",  "Error limit to invalidate position",
 					   -1., t->light_error_threshold)
+	STRUCT_CONFIG_ITEM("kalman-max-pose-angular-rate",
+					   "Maximum angular rate (rad/s) before suppressing pose output; -1 to disable",
+					   -1., t->max_pose_angular_rate)
 	STRUCT_CONFIG_ITEM("min-report-time",
 					   "Minimum kalman report time in s (-1 defaults to 1. / imu_hz)", -1., t->min_report_time)
 	STRUCT_CONFIG_ITEM("report-covariance", "Report covariance matrix every n poses", -1, t->report_covariance_cnt);
@@ -1674,6 +1677,28 @@ void survive_kalman_tracker_report_state(PoserData *pd, SurviveKalmanTracker *tr
 	survive_kalman_tracker_predict(tracker, t, &pose);
 	SV_DATA_LOG("model_predict", (FLT *)pose.Pos, sizeof(pose) / sizeof(FLT));
 
+	// Pose angular rate gate: suppress poses implying physically impossible rotation speed.
+	// Reflection-induced ghost poses produce large abrupt rotations; at typical camera-rig
+	// angular velocities the legitimate rotation rate is orders of magnitude lower.
+	// Ported from the equivalent gate in stagehand shtp_receiver.py, but applied here so
+	// the Kalman output is suppressed at the C level rather than only at the Python layer.
+	if (tracker->max_pose_angular_rate > 0 && tracker->last_report_time > 0 &&
+		quatmagnitude(tracker->last_reported_pose_rot) > 0.5) {
+		FLT dt = t - tracker->last_report_time;
+		if (dt > 0) {
+			FLT ang_rad = quatdist(tracker->last_reported_pose_rot, pose.Rot);
+			FLT ang_rate = ang_rad / dt;
+			if (ang_rate > tracker->max_pose_angular_rate) {
+				SurviveObject *so2 = tracker->so;
+				SV_VERBOSE(105,
+						   "Rejecting high angular rate pose: %.2f rad/s (threshold: %.2f) for %s",
+						   ang_rate, tracker->max_pose_angular_rate, survive_colorize_codename(so2));
+				tracker->stats.dropped_poses++;
+				return;
+			}
+		}
+	}
+
 	size_t state_cnt = tracker->model.state_cnt;
 	FLT var_diag[SURVIVE_MODEL_MAX_STATE_CNT] = {0};
 	FLT p_threshold = survive_kalman_tracker_position_var2(tracker, var_diag, tracker->model.error_state_size);
@@ -1745,6 +1770,7 @@ void survive_kalman_tracker_report_state(PoserData *pd, SurviveKalmanTracker *tr
 		}
     }
 
+    quatcopy(tracker->last_reported_pose_rot, pose.Rot);
     tracker->previous_state = tracker->state;
     copy3d(so->acceleration, tracker->state.Acc);
 	SV_VERBOSE(110, "%s confidence %7.7f", survive_colorize_codename(so), 1. / p_threshold);

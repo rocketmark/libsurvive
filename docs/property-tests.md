@@ -10,7 +10,7 @@ Tests use the existing test infrastructure (`test_case.h`, `REGISTER_LINKTIME`).
 
 ### 1. Quaternion / Pose Roundtrips (`quat_props.c`)
 
-12 properties, 10,000 random trials each (120,000 total).
+16 properties, 10,000 random trials each (160,000 total).
 
 | Test | Property |
 |---|---|
@@ -26,10 +26,12 @@ Tests use the existing test infrastructure (`test_case.h`, `REGISTER_LINKTIME`).
 | `MultiplicationAssociative` | `(a*b)*c = a*(b*c)` |
 | `SlerpBoundaries` | `slerp(a, b, 0) = a` and `slerp(a, b, 1) = b` |
 | `SlerpProducesUnit` | `\|slerp(a, b, t)\| = 1.0` for any t in [0,1] |
+| `QuatDistSelfIsZero` | `quatdist(q, q) = 0` for any unit quaternion |
+| `QuatDistSymmetric` | `quatdist(q1, q2) = quatdist(q2, q1)` |
+| `QuatDistNonNegativeAndBounded` | Result always in `[0, π]` |
+| `QuatDistKnownAngle` | `quatdist(identity, q_θ) ≈ θ` for quaternion encoding known rotation θ |
 
-#### Bug Found and Fixed
-
-**`quattomatrix33` / `quatfrommatrix33` matrix layout mismatch (fixed).** `quattomatrix33` previously output column-major ("opengl major") but `quatfrommatrix33` read row-major, causing the roundtrip to produce the conjugate (inverse rotation). Fixed by changing `quattomatrix33` to output row-major. The `MatrixRoundtrip` test now verifies the proper roundtrip `recovered = ±q`.
+2 bugs found and fixed — see Trophy Case.
 
 ### 2. Lighthouse Reprojection (`reproject_props.c`)
 
@@ -92,9 +94,9 @@ No bugs found in the Kalman predict code. The predict math is numerically stable
 
 ### 5. Numeric Robustness / NaN Propagation (`numeric_props.c`)
 
-10 properties, 1,000–10,000 random trials each.
+13 properties, 1,000–10,000 random trials each.
 
-Fuzz math functions with adversarial and degenerate inputs to verify no crashes or silent NaN/Inf propagation.
+Fuzz math functions with adversarial and degenerate inputs to verify no crashes or silent NaN/Inf propagation. Also covers the configurable sync cluster window added as part of reflection rejection.
 
 | Test | Property |
 |---|---|
@@ -108,6 +110,9 @@ Fuzz math functions with adversarial and degenerate inputs to verify no crashes 
 | `KabschCollinear` | Kabsch with collinear points doesn't crash, produces finite translation (rotation underdetermined) |
 | `KabschCoplanar` | Kabsch with coplanar points doesn't crash, produces finite pose (rotation underdetermined around normal axis) |
 | `LargeQuatNoOverflow` | `quatrotatevector` with very large quaternion components doesn't overflow |
+| `SyncWindowDefaultMatchesHardcoded` | `0.5 * 48000000.0 == 48000000 / 2` (new default exactly matches the old hard-coded constant) |
+| `SyncWindowTicksMonotonic` | Larger window seconds → larger tick count |
+| `SyncWindowZeroExcludesAll` | Zero-second window excludes all readings |
 
 No crashes found. `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash). Callers that may receive zero-magnitude input, including the stagehand agent integration, must guard against NaN propagation at their own boundary; that is outside the scope of these tests.
 
@@ -146,18 +151,36 @@ The Simple API uses a fixed 64-event circular buffer. These tests verify the que
 
 No bugs found. The circular buffer logic is correct. Queue overflow is silent by design (oldest events overwritten), which is documented but not a bug.
 
+### 8. Back-Facing Normal Filter Geometry (`normal_filter_props.c`)
+
+6 properties, 10,000 random trials each (60,000 total).
+
+Tests the geometric invariants that the back-facing normal filter in `SurviveSensorActivations_check_outlier()` depends on. The filter computes `dot(sensor_normal_world, toward_lighthouse)` and rejects hits where the result is below a threshold (default 0.0). These tests verify the geometry is correct without needing to call the static inline filter function directly.
+
+| Test | Property |
+|---|---|
+| `FacingnessInRange` | Dot product of unit normal and unit direction is always in `[-1, 1]` |
+| `FacingnessFlipsWithDirection` | `dot(n, d) + dot(n, -d) = 0` — flipping LH side inverts the sign |
+| `FacingnessKnownAngle` | Facingness equals `cos(θ)` for sensor normal at known angle θ from lighthouse |
+| `FacingnessThresholdMonotonic` | Threshold at `f−ε` accepts, threshold at `f+ε` rejects |
+| `DirectlyFacingAlwaysAccepted` | Sensor normal aligned with lighthouse gives facingness ≈ 1.0, passes any threshold ≤ 1 |
+| `BackFacingAlwaysRejected` | Sensor normal opposing lighthouse gives facingness ≈ −1.0, fails any threshold ≥ 0 |
+
+No bugs found. The filter geometry is correct: at the default threshold 0.0, sensors within 90° of the lighthouse are accepted and sensors beyond 90° are rejected, which is the physically correct cutoff for a flat sensor surface.
+
 ## Summary
 
 | Suite | File | Properties | Trials | Bugs Found |
 |---|---|---|---|---|
-| Quaternion/Pose | `quat_props.c` | 12 | 120,000 | 1 (matrix layout mismatch, fixed) |
+| Quaternion/Pose | `quat_props.c` | 16 | 160,000 | 2 (matrix layout, quatdist clamp) |
 | Reprojection | `reproject_props.c` | 13 | 65,000 | 0 |
 | Kabsch | `kabsch_props.c` | 5 | 25,000 | 0 |
 | Kalman Predict | `kalman_props.c` | 10 | ~74M steps | 0 |
-| Numeric Robustness | `numeric_props.c` | 10 | ~80,000 | 0 |
+| Numeric Robustness | `numeric_props.c` | 13 | ~90,000 | 0 |
 | Reprojection Residual | `reproject_residual_props.c` | 6 | 6,000 | 0 |
 | Event Queue | `event_queue_props.c` | 7 | ~3,500 | 0 |
-| **Total** | | **63** | | **1** |
+| Normal Filter | `normal_filter_props.c` | 6 | 60,000 | 0 |
+| **Total** | | **76** | | **2** |
 
 ## Running the Tests
 
@@ -177,6 +200,7 @@ ctest --output-on-failure
 ./src/test_cases/test-numeric_props
 ./src/test_cases/test-reproject_residual_props
 ./src/test_cases/test-event_queue_props
+./src/test_cases/test-normal_filter_props
 ```
 
 Tests also run automatically in CI (`ci-property-tests.yml`) on every push and PR. Under ASan/UBSan, the random inputs also catch undefined behavior and memory errors.
@@ -191,3 +215,70 @@ These tests cover pure math and in-process logic. They do not substitute for har
 - **Pose dropout under load** — long-duration stability issues are caused by the interaction of Kalman covariance growth, the reporting gate, and real sensor timing jitter — none of which can be driven by synthetic random inputs alone.
 
 These scenarios require physical trackers, base stations, and logged field data to reproduce and verify.
+
+---
+
+## Trophy Case
+
+Bugs found and fixed by property tests. Each entry records what the test was checking, what it
+actually found, and why the bug mattered.
+
+### Bug 1 — `quattomatrix33` / `quatfrommatrix33` row/column-major mismatch
+
+**Found by:** `QuatProps.MatrixRoundtrip` (`quat_props.c`)
+**File:** `redist/linmath.c` — `quattomatrix33()`
+**Commit:** eb409fc
+
+**What the test checked:** `quatfrommatrix33(quattomatrix33(q)) ≈ ±q` for 10,000 random unit
+quaternions.
+
+**What it found:** The roundtrip produced the conjugate of the input (i.e. the inverse rotation)
+instead of the original. The recovered quaternion was consistently `{w, -x, -y, -z}`.
+
+**Root cause:** `quattomatrix33` wrote the matrix in column-major ("OpenGL") layout, but
+`quatfrommatrix33` read it in row-major layout. The transposed matrix encodes the inverse of the
+intended rotation, so every roundtrip silently returned the wrong result.
+
+**Fix:** Changed `quattomatrix33` to write row-major. One-line reordering of the index arithmetic.
+
+**Why it mattered:** Any code path that converts a quaternion to a 3×3 matrix and then back (e.g.
+for interpolation helpers or external integrations) was silently getting the inverse rotation. This
+was not caught by existing tests because there were no roundtrip tests for this function pair.
+
+---
+
+### Bug 2 — `quatdist` clamp arguments swapped — always returned 0
+
+**Found by:** `QuatProps.QuatDistKnownAngle` (`quat_props.c`)
+**File:** `redist/linmath.c` — `quatdist()`, line 299
+**Status:** Fixed; candidate for upstream PR to `collabora/libsurvive`
+
+**What the test checked:** For a quaternion encoding a known rotation of θ radians around a random
+axis, `quatdist(identity, q_θ) ≈ θ`. Checked for θ in (0, π) across 10,000 random axes.
+
+**What it found:** `quatdist` returned 0.0 for every input, regardless of the actual angular
+separation.
+
+**Root cause:** The dot-product clamp before `acos` had its `min` and `max` arguments swapped:
+
+```c
+// WRONG — linmath_min(-1, rtn) is always ≤ -1, so linmath_max(1, ...) is always 1.0
+// acos(FLT_FABS(1.0)) = 0.0 for every input
+rtn = linmath_max(1., linmath_min(-1, rtn));
+```
+
+`linmath_min(-1, rtn)` returns a value ≤ −1 for any `rtn`. Then `linmath_max(1, ...)` clamps that
+to exactly 1.0. So `acos(|1.0|) = 0` always.
+
+**Fix:**
+
+```c
+// CORRECT — clamps dot product to [-1, 1] before acos
+rtn = linmath_min(1., linmath_max(-1., rtn));
+```
+
+**Why it mattered:** The Kalman tracker's pose angular rate gate (`--kalman-max-pose-angular-rate`)
+uses `quatdist` to measure the rotation between consecutive poses. With `quatdist` always returning
+0, the gate would have been completely inert in production — no rotation jump, however large, would
+ever exceed the threshold. The `QuatDistKnownAngle` test was written specifically to verify the
+units and magnitude of the return value, and it caught this immediately.

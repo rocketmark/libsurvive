@@ -83,24 +83,48 @@ The jerk-model process noise scales as t^7. libsurvive warns at dt > 500ms but d
 
 Moved `measured_dev` and `cnt` variable declarations to point of use to fix `-Werror=missing-field-initializers` style warnings. No behavioral change.
 
+### 9. Reflection artifact rejection — APPLIED
+
+Three source changes plus a bonus bug fix to reject reflection-contaminated sensor readings and
+poses before they corrupt the Kalman state. Reflections (LED walls, truss, shiny floors) cause
+libsurvive to accept ghost poses that are geometrically consistent but physically wrong.
+
+- **Back-facing normal filter** (`survive_sensor_activations.c`, `survive.h`): rejects sensor hits
+  where the sensor surface normal points away from the lighthouse. Configurable via
+  `--filter-normal-facingness` (default 0.0) and `--filter-normal-min-confidence` (default 0.1).
+- **Pose angular rate gate** (`survive_kalman_tracker.c`, `survive_kalman_tracker.h`): suppresses
+  pose emission when the implied angular rate exceeds a threshold. Disabled by default
+  (`--kalman-max-pose-angular-rate -1`); requires calibration from `reflect_test.cap` data before
+  enabling (expected value: 5–10 rad/s).
+- **Configurable sync cluster window** (`survive_sensor_activations.c`, `survive.h`): makes the
+  0.5s Chauvenet cluster window configurable via `--sync-cluster-window` (default 0.5; tighten to
+  0.15 for more reactive outlier detection).
+- **quatdist bug fix** (`redist/linmath.c`): pre-existing bug where swapped min/max clamp args
+  caused `quatdist()` to always return 0. Fixed: `linmath_max(1., linmath_min(-1, rtn))` →
+  `linmath_min(1., linmath_max(-1., rtn))`. This made the angular rate gate silently inert before
+  the fix was applied. Candidate for upstream PR to `collabora/libsurvive`.
+
+Full details: `docs/reflection-rejection.md`
+
 ## Property Tests (new files)
 
-Nine property test suites added in `src/test_cases/`:
+Ten property test suites added in `src/test_cases/`:
 
 | File | What it tests |
 |------|---------------|
-| `quat_props.c` | Quaternion math (normalization, rotation, slerp) |
+| `quat_props.c` | Quaternion math (normalization, rotation, slerp, quatdist) |
 | `kabsch_props.c` | Kabsch algorithm (rigid body alignment) |
 | `kalman_props.c` | Kalman filter properties (covariance, prediction) |
-| `numeric_props.c` | Numerical utilities (matrix ops, SVD) |
+| `numeric_props.c` | Numerical utilities (matrix ops, SVD, sync cluster window) |
 | `reproject_props.c` | Lighthouse reprojection model |
 | `reproject_residual_props.c` | Reprojection residual calculations |
 | `event_queue_props.c` | Event queue data structure |
 | `residual_cascade_props.c` | Light error threshold cascade (currently disabled path) |
 | `variance_gate_props.c` | Variance gate behavior, IMU gap sensitivity |
+| `normal_filter_props.c` | Back-facing normal filter geometry (reflection rejection) |
 
 CI workflow: `.github/workflows/ci-property-tests.yml`
-Documentation: `docs/property-tests.md`
+Documentation: `docs/property-tests.md`, `docs/reflection-rejection.md`
 
 ## CI Changes
 

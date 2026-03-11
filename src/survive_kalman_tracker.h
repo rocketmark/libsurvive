@@ -65,6 +65,9 @@ typedef struct SurviveKalmanTracker {
 
 	int light_batchsize;
 
+	FLT max_pose_angular_rate;           // rad/s; -1 disables the gate
+	LinmathQuat last_reported_pose_rot;  // rotation of last emitted pose (for angular rate gate)
+
 	FLT last_light_time, last_report_time, first_report_time;
 	FLT first_imu_time, last_imu_time;
 	FLT min_report_time;

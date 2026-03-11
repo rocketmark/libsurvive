@@ -18,6 +18,14 @@ STRUCT_CONFIG_ITEM("filter-variance-minimum", "Minimum variance to use in outlie
 // 11 here means we always allow up to 2 std deviations
 STRUCT_CONFIG_ITEM("filter-outlier-minimum-count", "Assumed minimum population for outlier test", 11,
 				   t->params.filterOutlierMinCount)
+STRUCT_CONFIG_ITEM("filter-normal-facingness",
+				   "Min dot product (sensor normal vs direction-to-lighthouse) to accept hit; < -0.5 disables", 0.0,
+				   t->params.filterNormalFacingness)
+STRUCT_CONFIG_ITEM("filter-normal-min-confidence",
+				   "Min pose confidence required before normal filter activates", 0.1,
+				   t->params.filterNormalMinConfidence)
+STRUCT_CONFIG_ITEM("sync-cluster-window", "Time window for sync cluster calculation in seconds", 0.5,
+				   t->params.syncClusterWindowS)
 
 END_STRUCT_CONFIG_SECTION(SurviveSensorActivations)
 
@@ -129,6 +137,38 @@ void SurviveSensorActivations_add_imu(SurviveSensorActivations *self, struct Pos
 
 static inline bool SurviveSensorActivations_check_outlier(SurviveSensorActivations *self, int sensor_id, int lh,
 														  int axis, survive_long_timecode timecode, FLT angle) {
+	// Back-facing normal filter: reject hits from directions the sensor cannot physically face.
+	// A reflected lighthouse sweep arrives from a geometrically different direction than the direct path;
+	// if the sensor's surface normal points away from the lighthouse, the reading is physically impossible
+	// via direct illumination and is almost certainly a reflection artifact.
+	// Ported from the equivalent check in driver_simulator.c:152-163.
+	if (self->params.filterNormalFacingness > -0.5 && self->so && self->so->sensor_normals &&
+		self->so->sensor_locations && self->so->poseConfidence >= self->params.filterNormalMinConfidence) {
+		SurviveContext *ctx = self->so->ctx;
+		if (ctx->bsd[lh].PositionSet) {
+			// Transform sensor normal from IMU/body frame to world frame
+			LinmathVec3d normalInWorld;
+			quatrotatevector(normalInWorld, self->so->OutPose.Rot, self->so->sensor_normals + sensor_id * 3);
+
+			// Compute world-space position of the sensor
+			LinmathVec3d sensorInWorld;
+			ApplyPoseToPoint(sensorInWorld, &self->so->OutPose, self->so->sensor_locations + sensor_id * 3);
+
+			// Direction from sensor toward lighthouse (world frame, normalised)
+			LinmathVec3d towardLh;
+			sub3d(towardLh, ctx->bsd[lh].Pose.Pos, sensorInWorld);
+			normalize3d(towardLh, towardLh);
+
+			FLT facingness = dot3d(normalInWorld, towardLh);
+			if (facingness < self->params.filterNormalFacingness) {
+				SV_VERBOSE(105,
+						   "Rejecting back-facing hit: facingness %+7.4f (threshold %+7.4f) for %2d.%2d.%d",
+						   facingness, self->params.filterNormalFacingness, lh, sensor_id, axis);
+				return true;
+			}
+		}
+	}
+
 	FLT *oldangle = &self->angles[sensor_id][lh][axis];
 	FLT chauvenet_criterion = -1;
 	FLT dev = 0;
@@ -322,7 +362,9 @@ void SurviveSensorActivations_add_sync(SurviveSensorActivations *self, struct Po
 			for (int i = 0; i < SENSORS_PER_OBJECT; i++) {
 				survive_long_timecode sensor_timecode = self->raw_timecode[i][lh][axis];
 				FLT angle = self->raw_angles[i][lh][axis];
-				bool isRecent = timecode - sensor_timecode < 48000000 / 2;
+				survive_long_timecode sync_window_ticks =
+					(survive_long_timecode)(self->params.syncClusterWindowS * 48000000.0);
+				bool isRecent = timecode - sensor_timecode < sync_window_ticks;
 
 				if (isRecent && isfinite(angle)) {
 					total_angles++;

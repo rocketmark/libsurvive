@@ -384,7 +384,129 @@ TEST(QuatProps, SlerpBoundaries) {
 	return 0;
 }
 
-// 12. Slerp output is always a unit quaternion
+// ── quatdist properties (used by kalman pose angular rate gate) ──────
+//
+// The Kalman tracker's angular rate gate computes:
+//   ang_rate = quatdist(last_reported_rot, new_rot) / dt
+// and rejects the pose if ang_rate > max_pose_angular_rate.
+// These tests verify that quatdist has the invariants the gate relies on.
+
+// 12. quatdist(q, q) == 0 for all unit quaternions
+//     The gate must never fire when the tracker is perfectly stationary.
+TEST(QuatProps, QuatDistSelfIsZero) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int i = 0; i < N_TRIALS; i++) {
+		LinmathQuat q;
+		rand_unit_quat(q);
+		FLT d = quatdist(q, q);
+
+		if (d > QUAT_TOL) {
+			fprintf(stderr, "QuatDistSelfIsZero FAILED (seed=%u, trial=%d)\n", seed, i);
+			fprintf(stderr, "  q: [%.10f, %.10f, %.10f, %.10f]\n", q[0], q[1], q[2], q[3]);
+			fprintf(stderr, "  quatdist(q, q) = %.15f (expected 0)\n", d);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// 13. quatdist is symmetric: quatdist(q1, q2) == quatdist(q2, q1)
+//     The angular rate is the same regardless of which direction the rotation went.
+TEST(QuatProps, QuatDistSymmetric) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int i = 0; i < N_TRIALS; i++) {
+		LinmathQuat q1, q2;
+		rand_unit_quat(q1);
+		rand_unit_quat(q2);
+		FLT d12 = quatdist(q1, q2);
+		FLT d21 = quatdist(q2, q1);
+
+		if (fabs(d12 - d21) > QUAT_TOL) {
+			fprintf(stderr, "QuatDistSymmetric FAILED (seed=%u, trial=%d)\n", seed, i);
+			fprintf(stderr, "  quatdist(q1,q2)=%.15f  quatdist(q2,q1)=%.15f\n", d12, d21);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// 14. quatdist is non-negative and bounded by pi
+//     Non-negative: dividing by dt must produce a non-negative rate.
+//     Bounded by pi: values above pi would indicate a bug in the distance function.
+TEST(QuatProps, QuatDistNonNegativeAndBounded) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int i = 0; i < N_TRIALS; i++) {
+		LinmathQuat q1, q2;
+		rand_unit_quat(q1);
+		rand_unit_quat(q2);
+		FLT d = quatdist(q1, q2);
+
+		if (d < 0) {
+			fprintf(stderr, "QuatDistNonNegativeAndBounded FAILED negative (seed=%u, trial=%d)\n", seed, i);
+			fprintf(stderr, "  quatdist = %.15f\n", d);
+			return -1;
+		}
+		if (d > LINMATHPI + QUAT_TOL) {
+			fprintf(stderr, "QuatDistNonNegativeAndBounded FAILED > pi (seed=%u, trial=%d)\n", seed, i);
+			fprintf(stderr, "  quatdist = %.15f (pi = %.15f)\n", d, LINMATHPI);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// 15. quatdist returns the correct angle for a known rotation
+//     For a quaternion representing a rotation of angle theta around any axis,
+//     quatdist(identity, q_theta) must equal theta (in radians).
+//     This is the most critical test: the angular rate gate threshold is calibrated
+//     in rad/s. If quatdist returns half-angle, degrees, or any other unit, the
+//     threshold we tune empirically would be wrong by a constant factor.
+TEST(QuatProps, QuatDistKnownAngle) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	LinmathQuat identity = {1, 0, 0, 0};
+
+	for (int i = 0; i < N_TRIALS; i++) {
+		// Random rotation axis (any direction)
+		LinmathPoint3d axis;
+		axis[0] = linmath_normrand(0, 1);
+		axis[1] = linmath_normrand(0, 1);
+		axis[2] = linmath_normrand(0, 1);
+		FLT axis_mag = magnitude3d(axis);
+		if (axis_mag < 1e-8) { axis[0] = 1.0; axis_mag = 1.0; }
+		scale3d(axis, axis, 1.0 / axis_mag);
+
+		// Random angle in (0, pi) to avoid wrap-around ambiguity
+		FLT theta = rand_range(0.01, LINMATHPI - 0.01);
+
+		// Build axis-angle magnitude vector and convert to quaternion
+		LinmathAxisAngleMag aa;
+		aa[0] = axis[0] * theta;
+		aa[1] = axis[1] * theta;
+		aa[2] = axis[2] * theta;
+		LinmathQuat q;
+		quatfromaxisanglemag(q, aa);
+
+		FLT d = quatdist(identity, q);
+
+		if (fabs(d - theta) > QUAT_TOL * 10) {
+			fprintf(stderr, "QuatDistKnownAngle FAILED (seed=%u, trial=%d)\n", seed, i);
+			fprintf(stderr, "  theta=%.10f  quatdist=%.10f  diff=%.2e\n", theta, d, fabs(d - theta));
+			fprintf(stderr, "  axis: [%.6f, %.6f, %.6f]\n", axis[0], axis[1], axis[2]);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// 16. Slerp output is always a unit quaternion
 TEST(QuatProps, SlerpProducesUnit) {
 	unsigned seed = (unsigned)time(NULL);
 	srand(seed);
