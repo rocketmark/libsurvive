@@ -46,6 +46,13 @@ typedef struct global_scene_solver {
 	og_mutex_t scenes_lock;
 	int run_count;
 
+	// Stagehand patch: flush pre-pose scenes after first solve.
+	// The first GSS solve runs blind (poseConfidence==0, normal filter off),
+	// so its scene data may be contaminated by reflections. Once the first
+	// pose is established we discard those scenes and re-capture with the
+	// normal filter active, so subsequent solves use only clean data.
+	bool flushed_blind_scenes;
+
 } global_scene_solver;
 
 STRUCT_CONFIG_SECTION(global_scene_solver)
@@ -136,6 +143,14 @@ static bool run_optimization(global_scene_solver *gss) {
 
 	OGLockMutex(gss->scenes_lock);
 
+	// Stagehand patch: guard against running the solver with 0 scenes.
+	// The flush in check_object() may race with an in-progress solver wake-up;
+	// calling the poser with scenes_cnt==0 can cause a hang or crash.
+	if (gss->scenes_cnt == 0) {
+		OGUnlockMutex(gss->scenes_lock);
+		return false;
+	}
+
 	PoserDataGlobalScenes pgss = {
 		.hdr = {.pt = POSERDATA_GLOBAL_SCENES}, .scenes_cnt = gss->scenes_cnt, .scenes = gss->scenes};
 	if (pgss.scenes_cnt > GSS_NUM_STORED_SCENES)
@@ -219,6 +234,24 @@ static size_t check_object(global_scene_solver *gss, int i, SurviveObject *so) {
 	survive_long_timecode last_change = so->activations.last_light_change;
 	survive_long_timecode standstill_time = SurviveSensorActivations_stationary_time(&so->activations);
 	survive_long_timecode lockout_time = so->timebase_hz * .1;
+
+	// Stagehand patch: once the first pose is established, discard any scenes
+	// captured while poseConfidence was zero (normal filter inactive, reflections
+	// unfiltered). The first solve produced a rough pose; flush its contaminated
+	// scene data so subsequent solves use only clean, filter-active captures.
+	// needsSolve is also cleared to prevent the threaded solver from being
+	// signalled with 0 scenes (which can cause the poser to hang holding ctx_lock).
+	if (!gss->flushed_blind_scenes && so->poseConfidence > 0 && gss->scenes_cnt > 0) {
+		SV_VERBOSE(10, "First pose established; flushing %d pre-pose scene(s) for %s",
+				   (int)gss->scenes_cnt, survive_colorize_codename(so));
+		gss->scenes_cnt = 0;
+		gss->needsSolve = false;
+		gss->flushed_blind_scenes = true;
+		memset(gss->last_capture_time, 0,
+			   sizeof(survive_long_timecode) * gss->last_capture_time_cnt);
+		if (gss->solve_counts > 0)
+			gss->solve_counts--;
+	}
 
 	bool activations_changed = so->activations.last_light_change != gss->last_capture_time[i];
 	bool spreadout = (last_event_time - gss->last_capture_time[i]) > so->timebase_hz * 3;
