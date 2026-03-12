@@ -966,7 +966,7 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 
 	survive_get_ctx_lock(ctx);
 	survive_recording_write_matrix(ctx->recptr, 0, 5, "GSS", &R);
-	bool status_failure = res <= 0;
+	bool status_failure = res <= 0 || res == MP_MAXITER;
 	FLT sensor_covariance = d->sensor_variance * d->sensor_variance;
 	FLT sensor_error = sqrtf(mpfitctx.stats.sensor_error / mpfitctx.stats.sensor_error_cnt);
 	if (status_failure || sensor_error > d->opt.max_cal_error) {
