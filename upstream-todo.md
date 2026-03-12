@@ -1,0 +1,101 @@
+# Upstream Contribution TODO
+
+Patches that should be submitted to cntools/libsurvive (or collabora/libsurvive).
+Reference: https://github.com/cntools/libsurvive
+
+## Already merged upstream
+
+- **quatdist clamp fix** (`redist/linmath.c`) — `linmath_max(1., linmath_min(-1, rtn))` →
+  `linmath_min(1., linmath_max(-1., rtn))`. Independently fixed by cntools. Removed from
+  `reflection_rejection.patch`.
+
+---
+
+## High priority — bug fixes, no controversy
+
+These are small correctness fixes with no API surface. High acceptance probability.
+
+### `variance_nan_guard`
+- **File**: `redist/variance.h`
+- **What**: Replaces `assert(isfinite(d[i]))` (process crash + config corruption) with a
+  graceful skip and stderr warning. Corrupt optical data from USB disturbances can produce
+  non-finite angles; crashing is strictly worse than dropping one sample.
+- **PR pitch**: "guard NaN input in variance_measure_add: skip instead of assert-crash"
+
+### `mpfit_nan_guard`
+- **File**: `src/poser_mpfit.c`
+- **What**: Guards NaN optical angles in `construct_input_from_scene`. Same root cause as
+  above — bad FPGA timestamps from USB disturbances produce non-finite angles that crash
+  the MPFIT solver.
+- **PR pitch**: "poser_mpfit: skip non-finite optical angles instead of passing to solver"
+
+### `gss_maxiter_guard`
+- **File**: `src/poser_mpfit.c`
+- **What**: Treats `MP_MAXITER` (solver hit iteration limit without converging) as a
+  failure rather than success. An unconverged GSS solve produces wrong lighthouse positions
+  that persist to disk and corrupt all subsequent tracking.
+- **PR pitch**: "solve_global_scene: treat MP_MAXITER as calibration failure"
+
+### `lightcap_unknown_report`
+- **File**: `src/driver_vive.c`
+- **What**: Downgrades `SV_ERROR` to `SV_WARN` for unknown USB lightcap report types.
+  New tracker firmware can emit report IDs that older libsurvive doesn't know; crashing
+  on an unrecognised ID is wrong.
+- **PR pitch**: "driver_vive: downgrade unknown lightcap report from error to warning"
+
+### `clear_halt`
+- **File**: `src/driver_vive.c`
+- **What**: Calls `libusb_clear_halt()` on the endpoint before `libusb_submit_transfer()`
+  in `AttachInterface`. Stalled endpoints must be cleared before re-submission.
+- **PR pitch**: "driver_vive: clear_halt before submit_transfer in AttachInterface"
+
+---
+
+## Medium priority — improvements worth submitting
+
+### Process noise dt cap (hunk from `reflection_rejection`)
+- **File**: `src/survive_kalman_tracker.c`
+- **What**: Caps `dt` at 0.05s in `survive_kalman_tracker_process_noise`. Without this,
+  a 1s IMU gap produces `t^7 = 1.0`, causing NaN/Inf in the Kalman filter
+  (observed: quatrotateabout assertion on cold start).
+- **Note**: Extract as a standalone patch — don't submit with the full reflection_rejection.
+- **PR pitch**: "kalman: cap process noise dt to prevent t^7 explosion on cold start"
+
+### `sync-cluster-window` config (hunk from `reflection_rejection`)
+- **File**: `src/survive_sensor_activations.c`
+- **What**: Makes the sync cluster time window configurable (was hardcoded to
+  `48000000 / 2` ticks = 0.5s). Adds `sync-cluster-window` config item.
+- **Note**: Extract as a standalone patch.
+- **PR pitch**: "sensor_activations: make sync cluster window configurable"
+
+### `gss_flush_blind_scenes`
+- **File**: `src/driver_global_scene_solver.c`
+- **What**: After first pose is established, discards GSS scenes captured while
+  poseConfidence was zero (normal filter inactive). Without this, the first GSS calibration
+  always uses unfiltered data regardless of any sensor-level filtering.
+- **Note**: Only makes sense if the normal filter (from `reflection_rejection`) is also
+  upstream. Submit together or after.
+- **PR pitch**: "gss: flush pre-pose scenes captured before sensor filter was active"
+
+---
+
+## Stagehand-specific — do not submit upstream as-is
+
+### `buttons_timeout`
+- Uses `_exit(1)` and relies on systemd for restart. Not appropriate for general use.
+- The two bug fixes embedded in it could be extracted:
+  - Double `error_count++` increment (was `if (iface->error_count++ < 10)`)
+  - Missing `libusb_clear_halt()` before stall retry
+
+### `usb_reset_on_open`
+- Calls `libusb_reset_device()` on every open. Only safe in Stagehand's single-device,
+  hard-exit (`_exit(99)`) model. Would be disruptive in multi-device or graceful-close use.
+
+---
+
+## Notes
+
+- cntools/libsurvive and collabora/libsurvive are both active. cntools appears to be the
+  more active community fork; collabora is the Valve-adjacent fork we track.
+- Submit to whichever accepts PRs; cross-post if both are active.
+- The `quatdifference` function (upstream addition) is unrelated to our work.
