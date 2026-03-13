@@ -15,19 +15,14 @@ Reference: https://github.com/cntools/libsurvive
   `rocketmark/libsurvive:upstream-pr/variance-nan-guard`.
 - **Process noise dt cap** — PR open against collabora/libsurvive from
   `rocketmark/libsurvive:upstream-pr/kalman-process-noise-dt-cap`. References collabora/libsurvive#346.
+- **`mpfit_nan_guard`** — PR open against cntools/libsurvive from
+  `rocketmark/libsurvive:upstream-pr/mpfit-nan-guard`.
 
 ---
 
 ## High priority — bug fixes, no controversy
 
 These are small correctness fixes with no API surface. High acceptance probability.
-
-### `mpfit_nan_guard`
-- **File**: `src/poser_mpfit.c`
-- **What**: Guards NaN optical angles in `construct_input_from_scene`. Same root cause as
-  above — bad FPGA timestamps from USB disturbances produce non-finite angles that crash
-  the MPFIT solver.
-- **PR pitch**: "poser_mpfit: skip non-finite optical angles instead of passing to solver"
 
 ### `gss_maxiter_guard`
 - **File**: `src/poser_mpfit.c`
@@ -52,14 +47,6 @@ These are small correctness fixes with no API surface. High acceptance probabili
 ---
 
 ## Medium priority — improvements worth submitting
-
-### Process noise dt cap (hunk from `reflection_rejection`)
-- **File**: `src/survive_kalman_tracker.c`
-- **What**: Caps `dt` at 0.05s in `survive_kalman_tracker_process_noise`. Without this,
-  a 1s IMU gap produces `t^7 = 1.0`, causing NaN/Inf in the Kalman filter
-  (observed: quatrotateabout assertion on cold start).
-- **Note**: Extract as a standalone patch — don't submit with the full reflection_rejection.
-- **PR pitch**: "kalman: cap process noise dt to prevent t^7 explosion on cold start"
 
 ### `sync-cluster-window` config (hunk from `reflection_rejection`)
 - **File**: `src/survive_sensor_activations.c`
