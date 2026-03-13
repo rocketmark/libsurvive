@@ -16,18 +16,7 @@ Reference: https://github.com/collabora/libsurvive
 - **`mpfit_nan_guard`** — https://github.com/collabora/libsurvive/pull/353
 - **`gss_maxiter_guard`** — https://github.com/collabora/libsurvive/pull/354
 - **`lightcap_unknown_report`** — https://github.com/collabora/libsurvive/pull/355
-
----
-
-## High priority — bug fixes, no controversy
-
-These are small correctness fixes with no API surface. High acceptance probability.
-
-### `clear_halt`
-- **File**: `src/driver_vive.c`
-- **What**: Calls `libusb_clear_halt()` on the endpoint before `libusb_submit_transfer()`
-  in `AttachInterface`. Stalled endpoints must be cleared before re-submission.
-- **PR pitch**: "driver_vive: clear_halt before submit_transfer in AttachInterface"
+- **`clear_halt`** — https://github.com/collabora/libsurvive/pull/356
 
 ---
 
