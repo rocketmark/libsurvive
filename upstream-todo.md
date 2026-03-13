@@ -79,7 +79,6 @@ These are small correctness fixes with no API surface. High acceptance probabili
 
 ## Notes
 
-- cntools/libsurvive and collabora/libsurvive are both active. cntools appears to be the
-  more active community fork; collabora is the Valve-adjacent fork we track.
-- Submit to whichever accepts PRs; cross-post if both are active.
+- cntools/libsurvive redirects to collabora/libsurvive — they are the same repo.
+- Submit PRs to collabora/libsurvive.
 - The `quatdifference` function (upstream addition) is unrelated to our work.
