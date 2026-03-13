@@ -15,19 +15,13 @@ Reference: https://github.com/collabora/libsurvive
 - **Process noise dt cap** — https://github.com/collabora/libsurvive/pull/352 (references collabora/libsurvive#346)
 - **`mpfit_nan_guard`** — https://github.com/collabora/libsurvive/pull/353
 - **`gss_maxiter_guard`** — https://github.com/collabora/libsurvive/pull/354
+- **`lightcap_unknown_report`** — https://github.com/collabora/libsurvive/pull/355
 
 ---
 
 ## High priority — bug fixes, no controversy
 
 These are small correctness fixes with no API surface. High acceptance probability.
-
-### `lightcap_unknown_report`
-- **File**: `src/driver_vive.c`
-- **What**: Downgrades `SV_ERROR` to `SV_WARN` for unknown USB lightcap report types.
-  New tracker firmware can emit report IDs that older libsurvive doesn't know; crashing
-  on an unrecognised ID is wrong.
-- **PR pitch**: "driver_vive: downgrade unknown lightcap report from error to warning"
 
 ### `clear_halt`
 - **File**: `src/driver_vive.c`
