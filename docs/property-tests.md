@@ -134,7 +134,7 @@ No bugs found. BSVD pose solver handles single-sensor corruption gracefully — 
 
 7 properties, 100–1,000 random trials each.
 
-The Simple API uses a fixed 64-event circular buffer. These tests verify the queue's behavior under normal use, overflow, and edge conditions. Context: the stagehand agent experienced a 24-minute pose dropout — one hypothesis was event queue overflow causing silent event loss.
+The Simple API uses a fixed 64-event circular buffer. These tests verify the queue's behavior under normal use, overflow, and edge conditions. Context: our tracker experienced a 24-minute pose dropout — one hypothesis was event queue overflow causing silent event loss.
 
 | Test | Property |
 |---|---|
@@ -221,7 +221,7 @@ actually found, and why the bug mattered.
 
 **Found by:** `QuatProps.MatrixRoundtrip` (`quat_props.c`)
 **File:** `redist/linmath.c` — `quattomatrix33()`
-**Commit:** eb409fc
+**Status:** Fixed; merged upstream as https://github.com/collabora/libsurvive/pull/347
 
 **What the test checked:** `quatfrommatrix33(quattomatrix33(q)) ≈ ±q` for 10,000 random unit
 quaternions.
@@ -245,7 +245,7 @@ was not caught by existing tests because there were no roundtrip tests for this 
 
 **Found by:** `QuatProps.QuatDistKnownAngle` (`quat_props.c`)
 **File:** `redist/linmath.c` — `quatdist()`, line 299
-**Status:** Fixed; candidate for upstream PR to `collabora/libsurvive`
+**Status:** Fixed; merged upstream as https://github.com/collabora/libsurvive/pull/350
 
 **What the test checked:** For a quaternion encoding a known rotation of θ radians around a random
 axis, `quatdist(identity, q_θ) ≈ θ`. Checked for θ in (0, π) across 10,000 random axes.
