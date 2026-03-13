@@ -9,18 +9,16 @@ Reference: https://github.com/cntools/libsurvive
   `linmath_min(1., linmath_max(-1., rtn))`. Independently fixed by cntools. Removed from
   `reflection_rejection.patch`.
 
+## PR submitted — awaiting review
+
+- **`variance_nan_guard`** — PR open against cntools/libsurvive from
+  `rocketmark/libsurvive:upstream-pr/variance-nan-guard`.
+
 ---
 
 ## High priority — bug fixes, no controversy
 
 These are small correctness fixes with no API surface. High acceptance probability.
-
-### `variance_nan_guard`
-- **File**: `redist/variance.h`
-- **What**: Replaces `assert(isfinite(d[i]))` (process crash + config corruption) with a
-  graceful skip and stderr warning. Corrupt optical data from USB disturbances can produce
-  non-finite angles; crashing is strictly worse than dropping one sample.
-- **PR pitch**: "guard NaN input in variance_measure_add: skip instead of assert-crash"
 
 ### `mpfit_nan_guard`
 - **File**: `src/poser_mpfit.c`
