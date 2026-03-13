@@ -6,7 +6,7 @@ Reference: https://github.com/collabora/libsurvive
 ## Already merged upstream
 
 - **quatdist clamp fix** (`redist/linmath.c`) — `linmath_max(1., linmath_min(-1, rtn))` →
-  `linmath_min(1., linmath_max(-1., rtn))`. Fixed upstream independently. Removed from
+  `linmath_min(1., linmath_max(-1., rtn))`. Merged as https://github.com/collabora/libsurvive/pull/350. Removed from
   `reflection_rejection.patch`.
 
 ## PR submitted — awaiting review
