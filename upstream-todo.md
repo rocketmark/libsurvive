@@ -14,19 +14,13 @@ Reference: https://github.com/collabora/libsurvive
 - **`variance_nan_guard`** — https://github.com/collabora/libsurvive/pull/351
 - **Process noise dt cap** — https://github.com/collabora/libsurvive/pull/352 (references collabora/libsurvive#346)
 - **`mpfit_nan_guard`** — https://github.com/collabora/libsurvive/pull/353
+- **`gss_maxiter_guard`** — https://github.com/collabora/libsurvive/pull/354
 
 ---
 
 ## High priority — bug fixes, no controversy
 
 These are small correctness fixes with no API surface. High acceptance probability.
-
-### `gss_maxiter_guard`
-- **File**: `src/poser_mpfit.c`
-- **What**: Treats `MP_MAXITER` (solver hit iteration limit without converging) as a
-  failure rather than success. An unconverged GSS solve produces wrong lighthouse positions
-  that persist to disk and corrupt all subsequent tracking.
-- **PR pitch**: "solve_global_scene: treat MP_MAXITER as calibration failure"
 
 ### `lightcap_unknown_report`
 - **File**: `src/driver_vive.c`
