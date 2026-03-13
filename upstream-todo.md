@@ -8,6 +8,8 @@ Reference: https://github.com/collabora/libsurvive
 - **quatdist clamp fix** (`redist/linmath.c`) — `linmath_max(1., linmath_min(-1, rtn))` →
   `linmath_min(1., linmath_max(-1., rtn))`. Merged as https://github.com/collabora/libsurvive/pull/350. Removed from
   `reflection_rejection.patch`.
+- **fix use-of-uninitialized-value in survive_kalman_tracker_stats** — https://github.com/collabora/libsurvive/pull/348
+- **fix quattomatrix33 row/column-major mismatch** — https://github.com/collabora/libsurvive/pull/347
 
 ## PR submitted — awaiting review
 
