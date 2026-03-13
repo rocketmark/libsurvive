@@ -944,6 +944,9 @@ void survive_kalman_tracker_process_noise(const struct SurviveKalmanTracker_Para
 	 * positional model with a second order rotational model with tuning parameters
 	 */
 
+	/* dt is capped to prevent NaN/inf values */
+	if (t > 0.05) t = 0.05;
+
 	FLT t2 = t * t;
 	FLT t3 = t2 * t;
 	FLT t4 = t3 * t;
