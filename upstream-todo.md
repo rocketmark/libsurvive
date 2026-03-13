@@ -11,12 +11,9 @@ Reference: https://github.com/cntools/libsurvive
 
 ## PR submitted — awaiting review
 
-- **`variance_nan_guard`** — PR open against cntools/libsurvive from
-  `rocketmark/libsurvive:upstream-pr/variance-nan-guard`.
-- **Process noise dt cap** — PR open against collabora/libsurvive from
-  `rocketmark/libsurvive:upstream-pr/kalman-process-noise-dt-cap`. References collabora/libsurvive#346.
-- **`mpfit_nan_guard`** — PR open against cntools/libsurvive from
-  `rocketmark/libsurvive:upstream-pr/mpfit-nan-guard`.
+- **`variance_nan_guard`** — https://github.com/cntools/libsurvive/pull/351
+- **Process noise dt cap** — https://github.com/cntools/libsurvive/pull/352 (also references collabora/libsurvive#346)
+- **`mpfit_nan_guard`** — https://github.com/cntools/libsurvive/pull/353
 
 ---
 
