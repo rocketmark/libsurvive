@@ -11,9 +11,9 @@ Reference: https://github.com/cntools/libsurvive
 
 ## PR submitted — awaiting review
 
-- **`variance_nan_guard`** — https://github.com/cntools/libsurvive/pull/351
-- **Process noise dt cap** — https://github.com/cntools/libsurvive/pull/352 (also references collabora/libsurvive#346)
-- **`mpfit_nan_guard`** — https://github.com/cntools/libsurvive/pull/353
+- **`variance_nan_guard`** — https://github.com/collabora/libsurvive/pull/351
+- **Process noise dt cap** — https://github.com/collabora/libsurvive/pull/352 (references collabora/libsurvive#346)
+- **`mpfit_nan_guard`** — https://github.com/collabora/libsurvive/pull/353
 
 ---
 
