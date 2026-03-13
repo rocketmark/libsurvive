@@ -1,12 +1,12 @@
 # Upstream Contribution TODO
 
-Patches that should be submitted to cntools/libsurvive (or collabora/libsurvive).
-Reference: https://github.com/cntools/libsurvive
+Patches that should be submitted to collabora/libsurvive.
+Reference: https://github.com/collabora/libsurvive
 
 ## Already merged upstream
 
 - **quatdist clamp fix** (`redist/linmath.c`) — `linmath_max(1., linmath_min(-1, rtn))` →
-  `linmath_min(1., linmath_max(-1., rtn))`. Independently fixed by cntools. Removed from
+  `linmath_min(1., linmath_max(-1., rtn))`. Fixed upstream independently. Removed from
   `reflection_rejection.patch`.
 
 ## PR submitted — awaiting review
