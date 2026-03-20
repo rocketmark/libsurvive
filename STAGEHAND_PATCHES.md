@@ -83,6 +83,32 @@ The jerk-model process noise scales as t^7. libsurvive warns at dt > 500ms but d
 
 Moved `measured_dev` and `cnt` variable declarations to point of use to fix `-Werror=missing-field-initializers` style warnings. No behavioral change.
 
+### 10. Atomic config write (`survive_config.c`) — APPLIED
+
+`config_save()` previously used `fopen(path, "w")` which truncates the destination file immediately, then wrote with multiple `fprintf()` calls. A power loss during any write left a truncated or empty `config.json`. On the next start libsurvive either failed to parse it or silently discarded it, forcing a full recalibration from a corrupted baseline.
+
+**Fix:** Write to `config.json.tmp` first, then `rename()` into place. `rename()` is atomic on Linux — either the old file survives intact or the new file is fully committed, never a partial.
+
+```c
+char tmp_path[FILENAME_MAX];
+snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+FILE *f = fopen(tmp_path, "w");
+// ...write...
+fclose(f);
+rename(tmp_path, path);
+```
+
+### 11. Lock GSS solver after first tracking (`driver_global_scene_solver.c`) — APPLIED
+
+After initial calibration is established, lighthouse wake events deliver fresh OOTX data which calls `ootx_recv()` → `set_needs_solve()` → schedules a new GSS solve. Mid-session re-solves use scene data captured during the lighthouse transition (noisy, partial) and can produce a bad calibration that corrupts tracking for the remainder of the session.
+
+**Fix:** Add an early return in `set_needs_solve()` guarded by `flushed_blind_scenes` (set by patch #9's `gss_flush_blind_scenes` logic once the first good pose is produced). Once tracking is established, no further re-solves are triggered regardless of lighthouse events. A restart is the correct response to genuine scene changes (lighthouse moved or replaced).
+
+```c
+if (gss->flushed_blind_scenes)
+    return;
+```
+
 ### 9. Reflection artifact rejection — APPLIED
 
 Three source changes plus a bonus bug fix to reject reflection-contaminated sensor readings and
@@ -142,6 +168,9 @@ Upstream CI workflows (cmake, docker, nuget, wheels, publish-source) were remove
 | 6 | GSS flag mapping | **REVERTED** | flag=1 broke tracking (OOTX stuck); needs investigation | investigate |
 | 7 | Process noise dt cap | **APPLIED** | YES (NaN crash on cold start) | — |
 | 8 | Compiler warning | YES | YES | — |
+| 9 | Reflection artifact rejection | **APPLIED** | YES (field confirmed) | — |
+| 10 | Atomic config write | **APPLIED** | Pending deploy | — |
+| 11 | Lock GSS after first tracking | **APPLIED** | Pending deploy | — |
 
 ## Re-apply Order
 

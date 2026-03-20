@@ -209,6 +209,15 @@ static void check_for_new_objects(global_scene_solver *gss) {
 }
 
 static void set_needs_solve(global_scene_solver *gss) {
+	// Stagehand patch: once tracking is established (flushed_blind_scenes set by
+	// gss_flush_blind_scenes patch), suppress further re-solves triggered by
+	// lighthouse wake/sleep OOTX events.  The calibration is good; re-solving
+	// mid-session from a lighthouse wake can produce a bad scene and corrupt
+	// the running calibration.  A restart is the correct recovery if the scene
+	// genuinely changes (lighthouse moved, replaced, etc.).
+	if (gss->flushed_blind_scenes)
+		return;
+
 	FLT now = survive_run_time(gss->ctx);
 
 	for (int lh = 0; lh < gss->ctx->activeLighthouses; lh++) {

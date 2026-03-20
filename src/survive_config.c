@@ -763,7 +763,13 @@ void config_save(SurviveContext *ctx) {
 	char path[FILENAME_MAX] = "";
 	survive_config_file_path(ctx, path);
 
-	FILE *f = fopen(path, "w");
+	// Stagehand patch: write to a temp file first, then rename() into place.
+	// rename() is atomic on Linux — a power loss during write leaves the old
+	// config intact rather than producing a truncated/corrupt file.
+	char tmp_path[FILENAME_MAX];
+	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+
+	FILE *f = fopen(tmp_path, "w");
 
 	if (f == 0) {
 		static bool warnedOnce = false;
@@ -787,6 +793,7 @@ void config_save(SurviveContext *ctx) {
 	}
 
 	fclose(f);
+	rename(tmp_path, path);
 }
 
 void print_json_value(char *tag, char **values, uint16_t count) {
