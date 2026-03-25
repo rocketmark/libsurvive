@@ -266,6 +266,11 @@ static void handle_transfer(struct libusb_transfer *transfer) {
 			fprintf(stderr, "[libsurvive] USB endpoint silent for 10s, exiting for restart"
 				" (if=%d %s ep=0x%02x)\n",
 				iface->which_interface_am_i, iface->hname, transfer->endpoint);
+			/* Stagehand patch: notify agent so it can emit IMU_WATCHDOG + flush
+			 * before exiting. Falls back to bare _exit(1) if not registered. */
+			{ extern void (*stagehand_imu_watchdog_cb)(int);
+			  if (stagehand_imu_watchdog_cb)
+			      stagehand_imu_watchdog_cb(iface->consecutive_timeouts); }
 			_exit(1);
 		}
 		if (libusb_submit_transfer(transfer)) {

@@ -972,7 +972,14 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 	if (status_failure || sensor_error > d->opt.max_cal_error) {
 		SV_WARN("MPFIT status failure %f/%f/%f (%d measurements, %d, %s)", result.orignorm, result.bestnorm,
 				sensor_error, (int)mpfitctx.measurementsCnt, res, survive_optimizer_error(res));
-
+		/* Stagehand patch: notify agent so it can emit GSS_FAILURE LOG_EVENT.
+		 * bestnorm * 100 clamped to u16 matches the SHTP data field spec. */
+		{ extern void (*stagehand_gss_failure_cb)(unsigned);
+		  if (stagehand_gss_failure_cb) {
+		      double bn = result.bestnorm * 100.0;
+		      stagehand_gss_failure_cb(bn > 65535.0 ? 65535u : (unsigned)bn);
+		  }
+		}
 		return false;
 	} else {
 		SV_INFO("MPFIT success %f/%10.10f/%7.7f (%d measurements, %d, %s, %d iters, up err %7.7f, trace %7.7f)",
