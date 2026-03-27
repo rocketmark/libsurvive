@@ -188,7 +188,7 @@ static int survive_open_usb_device(SurviveViveData *sv, survive_usb_device_t d, 
 					reset_ret, libusb_error_name(reset_ret));
 		} else {
 			/* Notify agent so it can emit USB_RESET log event. */
-			{ extern void (*stagehand_usb_reset_cb)(void);
+			{ extern __attribute__((weak)) void (*stagehand_usb_reset_cb)(void);
 			  if (stagehand_usb_reset_cb)
 			      stagehand_usb_reset_cb(); }
 		}
@@ -273,7 +273,7 @@ static void handle_transfer(struct libusb_transfer *transfer) {
 				iface->which_interface_am_i, iface->hname, transfer->endpoint);
 			/* Stagehand patch: notify agent so it can emit IMU_WATCHDOG + flush
 			 * before exiting. Falls back to bare _exit(1) if not registered. */
-			{ extern void (*stagehand_imu_watchdog_cb)(int);
+			{ extern __attribute__((weak)) void (*stagehand_imu_watchdog_cb)(int);
 			  if (stagehand_imu_watchdog_cb)
 			      stagehand_imu_watchdog_cb(iface->consecutive_timeouts); }
 			_exit(1);
