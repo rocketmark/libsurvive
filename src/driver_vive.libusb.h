@@ -186,6 +186,11 @@ static int survive_open_usb_device(SurviveViveData *sv, survive_usb_device_t d, 
 			SV_WARN("USB reset failed for %s (%04x:%04x): %d (%s) — continuing",
 					survive_colorize(info->name), idVendor, idProduct,
 					reset_ret, libusb_error_name(reset_ret));
+		} else {
+			/* Notify agent so it can emit USB_RESET log event. */
+			{ extern void (*stagehand_usb_reset_cb)(void);
+			  if (stagehand_usb_reset_cb)
+			      stagehand_usb_reset_cb(); }
 		}
 	}
 
