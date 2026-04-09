@@ -851,7 +851,12 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 			meas->light.sensor_idx = gss->scenes[i].meas[j].sensor_idx;
 			meas->invalid = false;
 
-			variance_measure_add(&lh_meas_variance[meas->light.lh * 2 + meas->light.axis], &meas->light.value);
+			/* Stagehand patch: GSS scenes may contain NaN angles if sweeps arrived
+			 * before sync timing was established (last_time_between_sync==0). Guard
+			 * here mirrors the guard in the normal measurement path above. */
+			if (isfinite(meas->light.value)) {
+				variance_measure_add(&lh_meas_variance[meas->light.lh * 2 + meas->light.axis], &meas->light.value);
+			}
 			meas++;
 		}
 	}

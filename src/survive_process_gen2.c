@@ -346,6 +346,16 @@ SURVIVE_EXPORT void survive_default_sweep_process(SurviveObject *so, survive_cha
 	if (half_clock_flag)
 		time_since_sync += 0.5 / 48000000.;
 
+	/* Stagehand patch: last_time_between_sync is zero until the first sync pair
+	 * arrives. Dividing by zero produces hz=inf, time_per_rot=0, and angle=NaN,
+	 * which cascades into a calibration-reset storm. Drop the sweep and wait for
+	 * valid sync timing before attempting to compute an angle. */
+	if (so->last_time_between_sync[bsd_idx] == 0) {
+		SV_VERBOSE(100, "Dropping sweep for ch %d: sync timing not yet established", channel);
+		so->stats.dropped_light[bsd_idx]++;
+		return;
+	}
+
 	FLT hz = 48000000. / so->last_time_between_sync[bsd_idx];
 	if (fabs(hz - freq_per_channel[channel]) > 1.0) {
 		hz = freq_per_channel[channel];
