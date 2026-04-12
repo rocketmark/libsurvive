@@ -1,3 +1,4 @@
+// @spec LPI-PROC-050, LPI-PROC-051, LPI-PROC-052, LPI-PROC-053
 #include "string.h"
 #include <assert.h>
 #include <math.h>

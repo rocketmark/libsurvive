@@ -2,6 +2,7 @@
 //
 //All MIT/x11 Licensed Code in this file may be relicensed freely under the GPL or LGPL licenses.
 
+// @spec LPI-PROC-020, LPI-PROC-021, LPI-PROC-022, LPI-PROC-023, LPI-PROC-024, LPI-PROC-025, LPI-PROC-027
 /* ootx data decoder */
 
 #include "ootx_decoder.h"

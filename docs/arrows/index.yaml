@@ -1,0 +1,53 @@
+schema_version: 1
+last_updated: 2026-04-12
+
+arrows:
+  lighthouse-protocol-intelligence:
+    status: MAPPED
+    sampled: 2026-04-12
+    audited: null
+    blocks: []
+    blockedBy: []
+    detail: lighthouse-protocol-intelligence.md
+    next: "Complete Gen2 processing path and remove debug fprintf calls from lfsr_lh2.c"
+    drift: "Gen2 path (survive_process_gen2.c) is nearly empty; LFSR decoder has debug output"
+
+  device-driver-stack:
+    status: MAPPED
+    sampled: 2026-04-12
+    audited: null
+    blocks: []
+    blockedBy: []
+    detail: device-driver-stack.md
+    next: "Add GSS solve-failure rejection and document driver_usbmon.c"
+    drift: "driver_global_scene_solver makes direct cross-cluster call into Tracking Engine"
+
+  tracking-engine:
+    status: MAPPED
+    sampled: 2026-04-12
+    audited: null
+    blocks: []
+    blockedBy: []
+    detail: tracking-engine.md
+    next: "Add CI guard for src/generated/ divergence from Python symbolic sources"
+    drift: "Generated math files committed without verification against Python sources"
+
+  library-infrastructure:
+    status: MAPPED
+    sampled: 2026-04-12
+    audited: null
+    blocks: []
+    blockedBy: []
+    detail: library-infrastructure.md
+    next: "Document survive_close() threading constraint; add Simple API event drop counter"
+    drift: null
+
+  language-bindings:
+    status: MAPPED
+    sampled: 2026-04-12
+    audited: null
+    blocks: []
+    blockedBy: []
+    detail: language-bindings.md
+    next: "Fix Unity coordinate handedness bug and ROS timecode wraparound"
+    drift: "Unity rotation mapping is wrong (handedness); ROS timestamps overflow at 89s"

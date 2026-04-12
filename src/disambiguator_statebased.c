@@ -1,4 +1,4 @@
-//
+// @spec LPI-PROC-010, LPI-PROC-011, LPI-PROC-012, LPI-PROC-013, LPI-PROC-014, LPI-PROC-015, LPI-PROC-016
 #include "survive_internal.h"
 #include <assert.h>
 #include <math.h> /* for sqrt */

@@ -2,6 +2,7 @@
 // Copyright 2016 <>< C. N. Lohr, FULLY Under MIT/x11 License.
 // All MIT/x11 Licensed Code in this file may be relicensed freely under the GPL or LGPL licenses.
 
+// @spec LI-API-001, LI-API-002, LI-API-003, LI-API-004, LI-BE-010, LI-BE-011, LI-BE-012, LI-BE-070, LI-BE-071
 #include "survive_internal.h"
 #include <assert.h>
 #include <ctype.h>
