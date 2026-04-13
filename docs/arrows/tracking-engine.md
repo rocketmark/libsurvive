@@ -4,7 +4,7 @@ Computes continuous 6-DOF pose and velocity for tracked objects by fusing lighth
 
 ## Status
 
-**MAPPED** - 2026-04-12. Full LLD written from brownfield reconnaissance. EARS specs written. Core tracking pipeline is mature and well-tested. Key gap: no CI guard on generated math files.
+**MAPPED** - 2026-04-13. Full LLD written from brownfield reconnaissance. EARS specs written. Core tracking pipeline is mature and well-tested. Per-LH adaptive R scaling and innovation gate implemented (TE-PROC-038, TE-PROC-039). Key gap: no CI guard on generated math files.
 
 ## References
 
@@ -60,24 +60,26 @@ Computes continuous 6-DOF pose and velocity for tracked objects by fusing lighth
 | Poser interface | TE-API-001 to 005 | 5 | 0 | 0 |
 | Geometric pose solvers | TE-PROC-010 to 015 | 6 | 0 | 0 |
 | MPFIT optimizer | TE-PROC-020 to 025 | 6 | 0 | 0 |
-| Kalman object tracker | TE-PROC-030 to 037 | 8 | 0 | 0 |
+| Kalman object tracker | TE-PROC-030 to 039 | 10 | 0 | 0 |
 | Kalman lighthouse tracker | TE-PROC-040 to 041 | 2 | 0 | 0 |
 | Reprojection model | TE-DATA-050 to 053 | 4 | 0 | 0 |
 | Math infrastructure | TE-DATA-060 to 064 | 4 | 1 | 0 |
 
-**Summary:** 35 of 36 active specs implemented; 1 active gap (CI guard for codegen); 0 deferred.
+**Summary:** 37 of 38 active specs implemented; 1 active gap (CI guard for codegen); 0 deferred.
 
 ## Key Findings
 
-1. **Generated math files committed without CI guard** — `src/generated/*.gen.h` can silently diverge from `tools/generate_math_functions/*.py` sources. Any math change requires manual regeneration with no automated verification. This is the highest-risk maintenance issue in the codebase. (TE-DATA-064)
+1. **Per-LH adaptive R and innovation gate reduce multi-lighthouse jitter** — `light_residuals[lh]` EWMA now populated and used to scale observation noise R per lighthouse (TE-PROC-038); pre-update RMS innovation gate skips outlier LH batches (TE-PROC-039). Both land in `src/survive_kalman_tracker.c`. See `docs/reflection-rejection.md` for full context.
 
-2. **IEKF divergence is silent** — When the IEKF terminates on max iterations rather than convergence, no warning is surfaced. The tracker proceeds with whatever state was reached. (`libs/cnkalman/src/iekf.c`, termination reason enum exists but is not surfaced upward)
+2. **Generated math files committed without CI guard** — `src/generated/*.gen.h` can silently diverge from `tools/generate_math_functions/*.py` sources. Any math change requires manual regeneration with no automated verification. This is the highest-risk maintenance issue in the codebase. (TE-DATA-064)
 
-3. **100+ config keys with no documented safe zone** — `survive_kalman_tracker.c` exposes an extremely large tuning surface. Many parameter combinations produce unstable behavior with no guidance on valid ranges.
+3. **IEKF divergence is silent** — When the IEKF terminates on max iterations rather than convergence, no warning is surfaced. The tracker proceeds with whatever state was reached. (`libs/cnkalman/src/iekf.c`, termination reason enum exists but is not surfaced upward)
 
-4. **`poser_epnp.c` appears redundant** — Solves the same problem as BaryCentricSVD with similar algorithms. Unclear which is preferred or whether EPnP is maintained.
+4. **100+ config keys with no documented safe zone** — `survive_kalman_tracker.c` exposes an extremely large tuning surface. Many parameter combinations produce unstable behavior with no guidance on valid ranges.
 
-5. **IMU bias model update cadence undocumented** — The separate IMU bias Kalman state interaction with the main 19D tracker (which updates which, in what order) is not documented.
+5. **`poser_epnp.c` appears redundant** — Solves the same problem as BaryCentricSVD with similar algorithms. Unclear which is preferred or whether EPnP is maintained.
+
+6. **IMU bias model update cadence undocumented** — The separate IMU bias Kalman state interaction with the main 19D tracker (which updates which, in what order) is not documented.
 
 ## Work Required
 
