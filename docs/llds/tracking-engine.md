@@ -231,6 +231,23 @@ for each state component:
 is updated from residuals: `R_k = 0.3×R_{k-1} + 0.7×(residual² + H×P×H^T)`.
 This allows the filter to learn per-sensor noise levels from experience.
 
+**Per-LH adaptive R (jitter reduction):** In addition to per-sensor adaptive R, each
+lighthouse's base noise covariance is scaled by the ratio of that LH's EWMA residual to the
+fleet mean: `lh_var = base_var * max(1.0, lh_res / mean_res)`. Lighthouses with
+above-average residuals receive proportionally larger R values and contribute less Kalman
+weight. The `light_residuals[lh]` EWMA (α=0.1) converges after ~20–30 samples per LH, so
+the effect takes 1–2 minutes to fully stabilize. See `docs/reflection-rejection.md` for the
+full implementation details and a not-yet-implemented cold-start ramp that could reduce this
+warmup time.
+
+**Per-LH innovation gate:** Where `light-outlier-threshold > 0`, the system performs a
+dry-run of the measurement model before each LH batch update. If the pre-update RMS
+innovation for a lighthouse exceeds `threshold × light_residuals_all`, that LH batch is
+skipped for the current sync cycle. This fires on the frame of the anomaly itself (transient
+reflections, interference), unlike the adaptive R which responds to persistent residual
+history. Disabled by default; recommended starting value 5.0. See
+`docs/reflection-rejection.md` for implementation details.
+
 **Stationary detection and ZVU:** When IMU variance falls below threshold
 (`kalman-stationary-*` config), the filter applies a Zero Velocity Update —
 a pseudo-measurement forcing velocity and acceleration to zero. This prevents
@@ -450,6 +467,8 @@ Library Infrastructure (pose hooks → application)
 | Separate lighthouse Kalman tracker | 7D filter independent of object tracker | `survive_kalman_lighthouses.c` | Lighthouses are stationary; 19D object tracker state is unnecessary; separate filter allows independent lighthouse refinement |
 | Double-buffered async optimizer | Two buffers, worker thread processes previous batch | `survive_async_optimizer.c` | Prevents main thread blocking on long solves; one-frame latency tradeoff acceptable for VR |
 | Adaptive R from residuals | R updated per-measurement from observed residuals | `cnkalman` adaptive R | Sensor noise varies by position, occlusion, reflection; learned R is more accurate than fixed R |
+| Per-LH adaptive R scaling | `lh_var = base_var * max(1.0, lh_res / mean_res)` | `survive_kalman_tracker.c` per-LH batch loop; `light_residuals[lh]` EWMA | Fixed R gives equal Kalman weight to all LHs; miscalibrated LHs pull state proportionally harder with more LHs active, causing jitter that grows with LH count |
+| Per-LH innovation gate disabled by default | `light_outlier_threshold = 0`; threshold of 5.0 recommended | Config item in `survive_kalman_tracker.c` | Gate fires on any anomalous frame; conservative default avoids false positives on new hardware or unusual geometry; opt-in once threshold is calibrated for the environment |
 | FLT type (float/double configurable) | All math uses `FLT` typedef | `libs/cnmatrix/include/cnmatrix/cn_flt.h` | Float gives 2× speed on SIMD for acceptable precision; double available for calibration tools |
 
 ## Technical Debt & Inconsistencies

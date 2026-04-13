@@ -378,6 +378,194 @@ active. Use this as the end-to-end acceptance check.
 
 ---
 
+## Change 4 — Per-LH Innovation Gate
+
+**Goal:** Detect and skip lighthouse batches whose pre-update Kalman innovation is anomalously
+large in the current sync cycle. Reflections and transient interference cause one lighthouse's
+sensor readings to spike while others remain clean — the innovation gate fires on the frame of
+the spike itself, preventing that batch from corrupting the Kalman state before it propagates.
+
+**Difference from the angular rate gate (Change 2):** The angular rate gate fires *after* the
+Kalman update has been applied and a pose has been emitted. The innovation gate fires *before*
+the update — the bad LH batch is never applied to the filter state at all.
+
+**Difference from adaptive R (Fix #2 / Jitter Reduction section below):** Adaptive R
+down-weights lighthouses that are *persistently* high-residual. The innovation gate fires on
+*sudden* anomalous frames regardless of the LH's historical residual — it targets transient
+events like reflections.
+
+### Files Modified
+
+#### `src/survive_kalman_tracker.h`
+
+Added between `lightcap_max_error` and `light_rampin_length`:
+
+```c
+FLT light_outlier_threshold;
+```
+
+#### `src/survive_kalman_tracker.c`
+
+Config item:
+
+```c
+STRUCT_CONFIG_ITEM("light-outlier-threshold",
+                   "Per-LH RMS innovation gate: skip a LH batch if its pre-update RMS residual "
+                   "exceeds this multiple of light_residuals_all (0 = disabled)", 0, t->light_outlier_threshold)
+```
+
+Gate logic added before R construction inside `survive_kalman_tracker_integrate_saved_light()`,
+in the per-LH batch loop:
+
+```c
+// @spec TE-PROC-039
+if (tracker->light_outlier_threshold > 0 && tracker->light_residuals_all > 0) {
+    CN_CREATE_STACK_VEC(y_dry, cnt);
+    bool dry_ok = map_light_data(&cbctx, &Z, &tracker->model.state, &y_dry, NULL);
+    if (dry_ok) {
+        const FLT *yv = cn_as_const_vector(&y_dry);
+        FLT sq = 0;
+        for (int i = 0; i < cnt; i++) sq += yv[i] * yv[i];
+        FLT rms = FLT_SQRT(sq / cnt);
+        if (rms > tracker->light_outlier_threshold * tracker->light_residuals_all) {
+            tracker->stats.lightcap_model_dropped++;
+            continue;
+        }
+    }
+}
+```
+
+`map_light_data` is called with `H_k=NULL` for a dry-run: no Jacobian is computed and no
+state update is applied. Only the innovation vector `y` is produced.
+
+**Recovery:** The gate re-evaluates every sync cycle with no persistent LH state. As soon as
+the reflection clears and the innovation drops below the threshold, the lighthouse is included
+again automatically on the next sync cycle — no manual reset required.
+
+**Default:** `light_outlier_threshold = 0` (disabled). Recommended starting value: `5.0`
+(skip any LH batch whose RMS innovation exceeds 5× the fleet mean).
+
+### Property Tests Added
+
+6 tests added to `src/test_cases/residual_cascade_props.c` (OutlierGate suite):
+
+| Test | Property |
+|---|---|
+| `DisabledWhenThresholdZero` | Gate never fires when threshold is 0 |
+| `DisabledOnColdStart` | Gate never fires when `light_residuals_all` is 0 (no history yet) |
+| `FiresAboveThreshold` | Gate fires when RMS > threshold × mean |
+| `DoesNotFireBelowThreshold` | Gate passes when RMS ≤ threshold × mean |
+| `RmsNonNegativeAndZeroOnlyWhenAllZero` | RMS is always ≥ 0; equals 0 only on zero input |
+| `SingleLargeInnovationTriggers` | One outlier sensor in a batch is sufficient to trigger the gate |
+
+---
+
+## Jitter Reduction — Per-LH Adaptive Noise Scaling
+
+**Problem:** A tracker sitting still exhibits positional jitter that grows with the number of
+active lighthouses. All lighthouses used the same fixed observation noise covariance
+(`light_var = 1e-2`). If any lighthouse has calibration error, it pulls the Kalman state in
+its direction every sync cycle. More lighthouses = more conflicting pulls = higher-frequency
+oscillation.
+
+**Fix:** Scale each lighthouse's R matrix by the ratio of that LH's EWMA residual to the
+fleet mean. Higher-residual lighthouses receive proportionally larger R values (less Kalman
+weight), so their influence on the state is reduced relative to well-calibrated lighthouses.
+
+**Result:** Jitter from a still tracker is measurably reduced. It may take 1–2 minutes after
+startup to reach full effect — see the warmup note below.
+
+### Files Modified
+
+#### `src/survive_kalman_tracker.c`
+
+Inside the per-LH batch loop in `survive_kalman_tracker_integrate_saved_light()`, the
+fixed-R construction:
+
+```c
+FLT light_var = tracker->light_var;
+```
+
+is replaced with the per-LH adaptive version:
+
+```c
+// @spec TE-PROC-038
+FLT base_var = tracker->light_var;
+FLT mean_res = tracker->light_residuals_all;
+FLT lh_res   = tracker->light_residuals[lh];
+FLT lh_var   = (mean_res > 0 && lh_res > 0)
+    ? base_var * linmath_max(1.0, lh_res / mean_res)
+    : base_var;
+```
+
+`linmath_max(1.0, ...)` ensures the factor never goes below 1.0 — we only ever increase R
+relative to the base, never decrease it. Falls back to `base_var` on cold start (no residual
+history).
+
+Per-LH EWMA update added after each LH batch is processed:
+
+```c
+tracker->light_residuals[lh] *= .9;
+tracker->light_residuals[lh] += .1 * lh_rtn;
+tracker->stats.lightcap_error_by_lh[lh] += lh_rtn;
+tracker->stats.lightcap_count_by_lh[lh]++;
+```
+
+The `lightcap_error_by_lh` and `lightcap_count_by_lh` fields were declared in the header
+but never written before this change — they are now populated.
+
+### Warmup Behavior
+
+The EWMA uses α=0.1, which means it needs approximately 20–30 samples per lighthouse to
+converge to ~90% of the true mean residual. During this warmup window all lighthouses receive
+approximately equal weight, and jitter resembles the pre-fix behavior. After convergence the
+scaling ratio stabilizes and jitter decreases.
+
+**Observed in practice:** Jitter visibly calms down after 1–2 minutes of tracking. This is
+expected and correct — the EWMA is working as designed.
+
+### Property Tests Added
+
+6 tests added to `src/test_cases/residual_cascade_props.c` (AdaptiveR suite):
+
+| Test | Property |
+|---|---|
+| `AlwaysAtLeastBaseVar` | `lh_var >= base_var` always — R is never reduced below baseline |
+| `EqualResidualIsIdentity` | When `lh_res == mean_res`, `lh_var == base_var` (ratio = 1.0) |
+| `HighResidualInflatesVar` | When `lh_res > mean_res`, `lh_var > base_var` |
+| `ColdStartFallsBackToBaseVar` | When `mean_res == 0`, falls back to `base_var` |
+| `MonotonicInLhResidual` | `lh_var` is non-decreasing as `lh_res` increases |
+| `PerLhEWMAConvergesIndependently` | Two lighthouses with different residuals converge to different EWMA values |
+
+### Future Work — Cold-Start Ramp (Not Yet Implemented)
+
+If the 1–2 minute warmup period is unacceptable, the EWMA convergence time can be reduced
+with a cold-start ramp: use a higher α during the first N updates on each lighthouse, then
+switch to the steady-state α.
+
+```c
+// Conceptual implementation — not currently in code
+size_t cnt_lh = tracker->stats.lightcap_count_by_lh[lh];
+FLT alpha = (cnt_lh < LIGHT_RESIDUAL_RAMP_SAMPLES) ? 0.3 : 0.1;
+tracker->light_residuals[lh] *= (1.0 - alpha);
+tracker->light_residuals[lh] += alpha * lh_rtn;
+```
+
+Where `LIGHT_RESIDUAL_RAMP_SAMPLES` would be a constant around 20 (covering roughly the
+first 2 seconds of lightcap data at typical update rates). After 20 frames at α=0.3, the
+EWMA is already at ~99% of the true mean; subsequent frames use α=0.1 for long-run stability.
+
+**Trade-off:** Higher α is more reactive — faster convergence but noisier, and more sensitive
+to transient events during the ramp window. For a static tracker the tradeoff is probably
+worth it. For a fast-moving tracker, the ramp could chase a transient reflection and skew
+the initial residual estimate.
+
+**Counter-argument for accepting the current warmup:** The 1–2 minute window isn't idle time
+— the filter is stabilizing the LH poses via GSS in parallel. By the time EWMA converges,
+the LH geometry estimates have also stabilized, so both sources of jitter reduce together.
+
+---
+
 ## What to Do Next
 
 - [ ] Run `reflect_test.cap` with `--survive-verbose 105` to observe actual per-pose angular rates
