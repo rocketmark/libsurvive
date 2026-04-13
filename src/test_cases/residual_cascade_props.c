@@ -774,3 +774,193 @@ TEST(ResidualCascade, SingleOutlierCanTriggerCascade) {
 	}
 	return 0;
 }
+
+// ── 8. Adaptive R (per-LH light_var scaling) Properties ─────────
+//
+// These test the invariants of the per-LH adaptive R formula introduced in
+// survive_kalman_tracker.c (TE-PROC-040):
+//
+//   lh_var = (mean_res > 0 && lh_res > 0)
+//              ? base_var * max(1.0, lh_res / mean_res)
+//              : base_var;
+//
+// The formula must satisfy:
+//   1. lh_var >= base_var always (never reduces below baseline)
+//   2. When lh_res == mean_res, lh_var == base_var (equal residuals → no change)
+//   3. When lh_res > mean_res, lh_var > base_var (biased LH gets penalized)
+//   4. Cold start (mean_res=0 or lh_res=0) → lh_var == base_var (safe fallback)
+//   5. lh_var is monotonically non-decreasing in lh_res
+
+static double adaptive_lh_var(double base_var, double mean_res, double lh_res) {
+	if (mean_res <= 0 || lh_res <= 0)
+		return base_var;
+	double ratio = lh_res / mean_res;
+	return base_var * (ratio > 1.0 ? ratio : 1.0);
+}
+
+// Property 1: lh_var is always >= base_var
+TEST(AdaptiveR, AlwaysAtLeastBaseVar) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double base_var = rand_range(1e-4, 1.0);
+		double mean_res = rand_range(0.0, 1.0);
+		double lh_res   = rand_range(0.0, 1.0);
+
+		double lh_var = adaptive_lh_var(base_var, mean_res, lh_res);
+
+		if (lh_var < base_var - 1e-12) {
+			fprintf(stderr, "AlwaysAtLeastBaseVar FAILED (seed=%u, trial=%d)\n", seed, trial);
+			fprintf(stderr, "  base_var=%.6f mean_res=%.6f lh_res=%.6f -> lh_var=%.6f\n",
+					base_var, mean_res, lh_res, lh_var);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 2: When lh_res == mean_res (and both > 0), lh_var == base_var
+TEST(AdaptiveR, EqualResidualIsIdentity) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double base_var = rand_range(1e-4, 1.0);
+		double res = rand_range(1e-6, 1.0);  // same for both mean and lh
+
+		double lh_var = adaptive_lh_var(base_var, res, res);
+
+		if (fabs(lh_var - base_var) > 1e-10) {
+			fprintf(stderr, "EqualResidualIsIdentity FAILED (seed=%u, trial=%d)\n", seed, trial);
+			fprintf(stderr, "  base_var=%.10f res=%.10f -> lh_var=%.10f (diff=%.2e)\n",
+					base_var, res, lh_var, fabs(lh_var - base_var));
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 3: lh_res > mean_res → lh_var > base_var
+TEST(AdaptiveR, HighResidualInflatesVar) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double base_var = rand_range(1e-4, 1.0);
+		double mean_res = rand_range(1e-6, 0.5);
+		// lh_res strictly greater than mean_res
+		double lh_res = mean_res + rand_range(1e-6, 0.5);
+
+		double lh_var = adaptive_lh_var(base_var, mean_res, lh_res);
+
+		if (lh_var <= base_var) {
+			fprintf(stderr, "HighResidualInflatesVar FAILED (seed=%u, trial=%d)\n", seed, trial);
+			fprintf(stderr, "  base_var=%.6f mean_res=%.6f lh_res=%.6f -> lh_var=%.6f\n",
+					base_var, mean_res, lh_res, lh_var);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 4: Cold start (mean_res=0 or lh_res=0) → safe fallback to base_var
+TEST(AdaptiveR, ColdStartFallsBackToBaseVar) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double base_var = rand_range(1e-4, 1.0);
+		double other    = rand_range(0.0, 1.0);
+
+		// Case A: mean_res = 0
+		double lh_var_a = adaptive_lh_var(base_var, 0.0, other);
+		if (fabs(lh_var_a - base_var) > 1e-12) {
+			fprintf(stderr, "ColdStartFallsBackToBaseVar FAILED case A (seed=%u, trial=%d)\n", seed, trial);
+			fprintf(stderr, "  base_var=%.6f mean_res=0.0 lh_res=%.6f -> lh_var=%.6f\n",
+					base_var, other, lh_var_a);
+			return -1;
+		}
+
+		// Case B: lh_res = 0
+		double lh_var_b = adaptive_lh_var(base_var, other, 0.0);
+		if (fabs(lh_var_b - base_var) > 1e-12) {
+			fprintf(stderr, "ColdStartFallsBackToBaseVar FAILED case B (seed=%u, trial=%d)\n", seed, trial);
+			fprintf(stderr, "  base_var=%.6f mean_res=%.6f lh_res=0.0 -> lh_var=%.6f\n",
+					base_var, other, lh_var_b);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 5: lh_var is monotonically non-decreasing in lh_res
+// (more residual error → equal or more variance, never less)
+TEST(AdaptiveR, MonotonicInLhResidual) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double base_var = rand_range(1e-4, 1.0);
+		double mean_res = rand_range(1e-6, 0.5);
+		double lh_res_lo = rand_range(1e-6, 0.5);
+		double lh_res_hi = lh_res_lo + rand_range(1e-6, 0.5);
+
+		double lh_var_lo = adaptive_lh_var(base_var, mean_res, lh_res_lo);
+		double lh_var_hi = adaptive_lh_var(base_var, mean_res, lh_res_hi);
+
+		if (lh_var_hi < lh_var_lo - 1e-12) {
+			fprintf(stderr, "MonotonicInLhResidual FAILED (seed=%u, trial=%d)\n", seed, trial);
+			fprintf(stderr, "  base_var=%.6f mean_res=%.6f\n", base_var, mean_res);
+			fprintf(stderr, "  lh_res_lo=%.6f -> lh_var=%.6f\n", lh_res_lo, lh_var_lo);
+			fprintf(stderr, "  lh_res_hi=%.6f -> lh_var=%.6f\n", lh_res_hi, lh_var_hi);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 6: Per-LH EWMA converges independently for each LH slot.
+// Each light_residuals[lh] slot uses the same EMA formula as light_residuals_all.
+// This test simulates two LHs with different steady-state residuals and verifies
+// that each EWMA slot converges to its own value without cross-contamination.
+TEST(AdaptiveR, PerLhEWMAConvergesIndependently) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 1000; trial++) {
+		double lh0_steady = rand_range(0.001, 0.1);
+		double lh1_steady = rand_range(0.001, 0.1);
+
+		double ema0 = 0.0, ema1 = 0.0;
+
+		// Drive both EWMA slots with their respective steady inputs
+		for (int i = 0; i < 100; i++) {
+			ema0 = ema_update(ema0, lh0_steady);
+			ema1 = ema_update(ema1, lh1_steady);
+		}
+
+		// Both should have converged (0.9^100 ≈ 2.7e-5, negligible)
+		if (fabs(ema0 - lh0_steady) > 1e-3) {
+			fprintf(stderr, "PerLhEWMAConvergesIndependently FAILED (seed=%u, trial=%d): "
+					"ema0=%.6f target=%.6f\n", seed, trial, ema0, lh0_steady);
+			return -1;
+		}
+		if (fabs(ema1 - lh1_steady) > 1e-3) {
+			fprintf(stderr, "PerLhEWMAConvergesIndependently FAILED (seed=%u, trial=%d): "
+					"ema1=%.6f target=%.6f\n", seed, trial, ema1, lh1_steady);
+			return -1;
+		}
+
+		// Slots must not influence each other
+		double expected_ratio = lh1_steady / lh0_steady;
+		double actual_ratio   = ema1 / ema0;
+		if (fabs(actual_ratio - expected_ratio) > expected_ratio * 0.01 + 1e-6) {
+			fprintf(stderr, "PerLhEWMAConvergesIndependently FAILED cross-contamination "
+					"(seed=%u, trial=%d): ratio=%.6f expected=%.6f\n",
+					seed, trial, actual_ratio, expected_ratio);
+			return -1;
+		}
+	}
+	return 0;
+}

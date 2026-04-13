@@ -38,6 +38,7 @@ Prefix: **TE**
 - [x] **TE-PROC-035**: The system shall update each lightcap measurement's noise covariance R adaptively from observed residuals: `R_k = 0.3×R_{k-1} + 0.7×(residual² + H×P×H^T)`.
 - [x] **TE-PROC-036**: While the tracked object is stationary (IMU variance below `kalman-stationary-*` thresholds), the system shall apply a Zero Velocity Update pseudo-measurement forcing velocity and acceleration toward zero.
 - [x] **TE-PROC-037**: When tracking is lost (no valid measurements for the configured timeout period), the system shall reset the Kalman state covariance to reflect high uncertainty.
+- [x] **TE-PROC-038**: The system shall scale each lighthouse's observation noise covariance R by the ratio of that lighthouse's EWMA residual to the fleet mean residual, so that lighthouses with above-average residuals receive proportionally less Kalman weight.
 
 ## Kalman Lighthouse Tracker
 

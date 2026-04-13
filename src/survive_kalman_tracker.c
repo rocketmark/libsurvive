@@ -448,12 +448,22 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 			};
 
 			SurviveObject *so = tracker->so;
-			FLT light_var = tracker->light_var;
 
-			SV_DATA_LOG("light_var", &light_var, 1);
+			// @spec TE-PROC-038
+			// Adaptive R: scale observation noise by per-LH residual history.
+			// A lighthouse with residuals above the fleet mean gets a larger R
+			// (less Kalman weight); equal residuals leave light_var unchanged.
+			FLT base_var = tracker->light_var;
+			FLT mean_res = tracker->light_residuals_all;
+			FLT lh_res   = tracker->light_residuals[lh];
+			FLT lh_var   = (mean_res > 0 && lh_res > 0)
+				? base_var * linmath_max(1.0, lh_res / mean_res)
+				: base_var;
+
+			SV_DATA_LOG("light_var", &lh_var, 1);
 			FLT light_vars[32] = {0};
 			for (int i = 0; i < 32; i++)
-				light_vars[i] = light_var;
+				light_vars[i] = lh_var;
 			CnMat R = cnVec(Z.rows, light_vars);
 
 			tracker->datalog_tag = "light_data";
@@ -466,16 +476,25 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 
 			tracker->last_light_time = time;
 
+			FLT lh_rtn;
 			if(useJointModel && tracker->joint_lightcap_ratio < ratio) {
 				tracker->joint_model.ks[0] = &ctx->bsd[lh].tracker->model;
 				tracker->joint_model.ks[1] = &ctx->bsd[lh].tracker->bsd_model;
-				rtn += cnkalman_meas_model_predict_update(time, &tracker->joint_model, &cbctx, &Z, &R);
+				lh_rtn = cnkalman_meas_model_predict_update(time, &tracker->joint_model, &cbctx, &Z, &R);
+				rtn += lh_rtn;
 				tracker->stats.joint_model_sensor_cnt_sum += cnt;
 				survive_kalman_lighthouse_report(ctx->bsd[lh].tracker);
 			} else {
-				rtn += cnkalman_meas_model_predict_update(time, &tracker->lightcap_model, &cbctx, &Z, &R);
+				lh_rtn = cnkalman_meas_model_predict_update(time, &tracker->lightcap_model, &cbctx, &Z, &R);
+				rtn += lh_rtn;
 				tracker->stats.lightcap_model_sensor_cnt_sum += cnt;
 			}
+
+			// Update per-LH residual EWMA (feeds adaptive R on subsequent frames)
+			tracker->light_residuals[lh] *= .9;
+			tracker->light_residuals[lh] += .1 * lh_rtn;
+			tracker->stats.lightcap_error_by_lh[lh] += lh_rtn;
+			tracker->stats.lightcap_count_by_lh[lh]++;
 		}
 
 		tracker->datalog_tag = 0;
