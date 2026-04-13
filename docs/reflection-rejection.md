@@ -442,7 +442,9 @@ state update is applied. Only the innovation vector `y` is produced.
 the reflection clears and the innovation drops below the threshold, the lighthouse is included
 again automatically on the next sync cycle — no manual reset required.
 
-**Default:** `light_outlier_threshold = 0` (disabled). Recommended starting value: `5.0`
+**Default:** `light_outlier_threshold = 0` (disabled in libsurvive itself). Stagehand sets
+this to `5.0` via `DEFAULT_SURVIVE_ARGS` in `scripts/stagehand-health`, so it is active by
+default in all Stagehand deployments. Recommended starting value for other integrations: `5.0`
 (skip any LH batch whose RMS innovation exceeds 5× the fleet mean).
 
 ### Property Tests Added
