@@ -140,6 +140,7 @@ typedef struct SurviveKalmanTracker {
 	FLT Lightcap_R;
 
 	FLT lightcap_max_error;
+	FLT light_outlier_threshold;
 	int light_rampin_length;
 	bool use_error_for_lh_pos;
 

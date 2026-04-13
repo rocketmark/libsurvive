@@ -46,6 +46,9 @@ STRUCT_CONFIG_SECTION(SurviveKalmanTracker)
 					   "Minimum observations to allow light data into the kalman filter", 16, t->light_required_obs)
 
     STRUCT_CONFIG_ITEM("light-max-error",  "Maximum error to integrate into lightcap", -1, t->lightcap_max_error)
+    STRUCT_CONFIG_ITEM("light-outlier-threshold",
+                       "Per-LH RMS innovation gate: skip a LH batch if its pre-update RMS residual "
+                       "exceeds this multiple of light_residuals_all (0 = disabled)", 0, t->light_outlier_threshold)
     STRUCT_CONFIG_ITEM("kalman-light-variance",  "Variance of raw light sensor readings", 1e-2, t->light_var)
     STRUCT_CONFIG_ITEM("obs-cov-scale",  "Covariance matrix scaling for obs",
                        1, t->obs_cov_scale)
@@ -446,6 +449,28 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 			struct map_light_data_ctx cbctx = {
 				.tracker = tracker,
 			};
+
+			// @spec TE-PROC-039
+			// Per-LH innovation gate: compute pre-update RMS residual via a dry-run
+			// of the measurement model (no state change). If it exceeds
+			// light_outlier_threshold × light_residuals_all, the LH is producing
+			// measurements too far from the current state estimate to be trusted
+			// (typically a reflection or severe miscalibration) and is skipped for
+			// this sync cycle.
+			if (tracker->light_outlier_threshold > 0 && tracker->light_residuals_all > 0) {
+				CN_CREATE_STACK_VEC(y_dry, cnt);
+				bool dry_ok = map_light_data(&cbctx, &Z, &tracker->model.state, &y_dry, NULL);
+				if (dry_ok) {
+					const FLT *yv = cn_as_const_vector(&y_dry);
+					FLT sq = 0;
+					for (int i = 0; i < cnt; i++) sq += yv[i] * yv[i];
+					FLT rms = FLT_SQRT(sq / cnt);
+					if (rms > tracker->light_outlier_threshold * tracker->light_residuals_all) {
+						tracker->stats.lightcap_model_dropped++;
+						continue;
+					}
+				}
+			}
 
 			SurviveObject *so = tracker->so;
 

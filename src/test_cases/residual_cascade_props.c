@@ -964,3 +964,182 @@ TEST(AdaptiveR, PerLhEWMAConvergesIndependently) {
 	}
 	return 0;
 }
+
+// ── 9. Per-LH Innovation Gate Properties (TE-PROC-039) ──────────
+//
+// The outlier gate in survive_kalman_tracker.c fires when:
+//   rms_innovation > light_outlier_threshold * light_residuals_all
+//
+// These tests exercise the gate decision logic in isolation. They do not
+// call map_light_data (which requires the full Kalman machinery) — instead
+// they test the RMS computation and threshold comparison that wraps the
+// dry-run call.
+
+// Reproduce the gate decision from survive_kalman_tracker.c:
+//   gate fires when rms > threshold * mean_res  (and threshold > 0, mean_res > 0)
+static bool outlier_gate_fires(double rms, double threshold, double mean_res) {
+	if (threshold <= 0 || mean_res <= 0)
+		return false;
+	return rms > threshold * mean_res;
+}
+
+// Reproduce the RMS computation:
+//   rms = sqrt(sum(y[i]^2) / cnt)
+static double compute_rms(const double *y, int cnt) {
+	double sq = 0;
+	for (int i = 0; i < cnt; i++) sq += y[i] * y[i];
+	return sqrt(sq / cnt);
+}
+
+// Property 1: Gate is disabled when threshold <= 0 (default off)
+TEST(OutlierGate, DisabledWhenThresholdZero) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double rms       = rand_range(0.0, 100.0);
+		double threshold = rand_range(-10.0, 0.0);  // disabled range
+		double mean_res  = rand_range(1e-6, 1.0);
+
+		if (outlier_gate_fires(rms, threshold, mean_res)) {
+			fprintf(stderr, "DisabledWhenThresholdZero FAILED (seed=%u, trial=%d): "
+					"rms=%.4f threshold=%.4f mean_res=%.4f\n", seed, trial, rms, threshold, mean_res);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 2: Gate is disabled when mean_res <= 0 (cold start: no fleet baseline yet)
+TEST(OutlierGate, DisabledOnColdStart) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double rms       = rand_range(0.0, 100.0);
+		double threshold = rand_range(1.0, 10.0);   // enabled
+		double mean_res  = 0.0;                       // cold start
+
+		if (outlier_gate_fires(rms, threshold, mean_res)) {
+			fprintf(stderr, "DisabledOnColdStart FAILED (seed=%u, trial=%d): "
+					"rms=%.4f threshold=%.4f\n", seed, trial, rms, threshold);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 3: Gate fires when rms > threshold * mean_res
+TEST(OutlierGate, FiresAboveThreshold) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double threshold = rand_range(1.0, 10.0);
+		double mean_res  = rand_range(1e-4, 0.1);
+		// rms strictly above the trigger point
+		double rms = threshold * mean_res + rand_range(1e-6, 0.5);
+
+		if (!outlier_gate_fires(rms, threshold, mean_res)) {
+			fprintf(stderr, "FiresAboveThreshold FAILED (seed=%u, trial=%d): "
+					"rms=%.6f threshold=%.4f mean_res=%.6f trigger=%.6f\n",
+					seed, trial, rms, threshold, mean_res, threshold * mean_res);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 4: Gate does NOT fire when rms <= threshold * mean_res
+TEST(OutlierGate, DoesNotFireBelowThreshold) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	for (int trial = 0; trial < 10000; trial++) {
+		double threshold = rand_range(1.0, 10.0);
+		double mean_res  = rand_range(1e-4, 0.1);
+		// rms strictly below the trigger point
+		double rms = rand_range(0.0, threshold * mean_res - 1e-8);
+		if (rms < 0) rms = 0;
+
+		if (outlier_gate_fires(rms, threshold, mean_res)) {
+			fprintf(stderr, "DoesNotFireBelowThreshold FAILED (seed=%u, trial=%d): "
+					"rms=%.6f threshold=%.4f mean_res=%.6f trigger=%.6f\n",
+					seed, trial, rms, threshold, mean_res, threshold * mean_res);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 5: RMS is non-negative and zero only for all-zero innovations
+TEST(OutlierGate, RmsNonNegativeAndZeroOnlyWhenAllZero) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	// All-zero case
+	{
+		double y[8] = {0};
+		double rms = compute_rms(y, 8);
+		if (rms != 0.0) {
+			fprintf(stderr, "RmsNonNegativeAndZeroOnlyWhenAllZero FAILED: all-zero rms=%.10f\n", rms);
+			return -1;
+		}
+	}
+
+	for (int trial = 0; trial < 10000; trial++) {
+		int cnt = 1 + rand() % 32;
+		double y[32];
+		bool all_zero = true;
+		for (int i = 0; i < cnt; i++) {
+			y[i] = rand_range(-1.0, 1.0);
+			if (y[i] != 0.0) all_zero = false;
+		}
+		double rms = compute_rms(y, cnt);
+		if (rms < 0) {
+			fprintf(stderr, "RmsNonNegativeAndZeroOnlyWhenAllZero FAILED: rms=%.6f < 0\n", rms);
+			return -1;
+		}
+		if (!all_zero && rms == 0.0) {
+			fprintf(stderr, "RmsNonNegativeAndZeroOnlyWhenAllZero FAILED: non-zero y but rms=0\n");
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// Property 6: Single large innovation (reflection scenario) triggers the gate.
+// A reflection might produce one sensor innovation >> normal; compute_rms
+// should be above a reasonable threshold even for a single outlier sensor.
+TEST(OutlierGate, SingleLargeInnovationTriggers) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	int triggered = 0;
+
+	for (int trial = 0; trial < 1000; trial++) {
+		int cnt = 8 + rand() % 24;          // 8-32 sensors
+		double mean_res = rand_range(0.005, 0.02);  // typical fleet residual
+		double threshold = 5.0;
+
+		// All sensors normal except one reflection spike
+		double y[32];
+		for (int i = 0; i < cnt; i++)
+			y[i] = rand_range(-mean_res, mean_res);
+		int spike_sensor = rand() % cnt;
+		// Reflection: 20-100× the normal noise
+		y[spike_sensor] = mean_res * rand_range(20.0, 100.0);
+
+		double rms = compute_rms(y, cnt);
+		if (outlier_gate_fires(rms, threshold, mean_res)) {
+			triggered++;
+		}
+	}
+
+	// A 20-100× spike on any single sensor in a batch of 8-32 should be detectable
+	if (triggered < 800) {
+		fprintf(stderr, "SingleLargeInnovationTriggers FAILED: only %d/1000 triggered\n", triggered);
+		return -1;
+	}
+	return 0;
+}

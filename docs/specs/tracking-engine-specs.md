@@ -39,6 +39,7 @@ Prefix: **TE**
 - [x] **TE-PROC-036**: While the tracked object is stationary (IMU variance below `kalman-stationary-*` thresholds), the system shall apply a Zero Velocity Update pseudo-measurement forcing velocity and acceleration toward zero.
 - [x] **TE-PROC-037**: When tracking is lost (no valid measurements for the configured timeout period), the system shall reset the Kalman state covariance to reflect high uncertainty.
 - [x] **TE-PROC-038**: The system shall scale each lighthouse's observation noise covariance R by the ratio of that lighthouse's EWMA residual to the fleet mean residual, so that lighthouses with above-average residuals receive proportionally less Kalman weight.
+- [x] **TE-PROC-039**: Where `light-outlier-threshold` is > 0, the system shall compute the pre-update RMS innovation for each lighthouse batch and skip that lighthouse's Kalman update for the current sync cycle if the RMS exceeds `light-outlier-threshold × light_residuals_all`.
 
 ## Kalman Lighthouse Tracker
 
