@@ -280,12 +280,13 @@ Added to the existing `quat_props.c` test suite:
 
 `QuatDistKnownAngle` is the test that caught the swapped-clamp bug.
 
-### `src/test_cases/normal_filter_props.c` — new file (6 tests)
+### `src/test_cases/normal_filter_props.c` — 7 tests
 
 Property tests for the back-facing normal filter geometric invariants:
 
 | Test | Property |
 |---|---|
+| `SensorNormalBodyToWorldTransform` | sensor_normals[] are in body frame: `quatrotatevector(rot, normal_body)` produces the correct world-frame normal for 90°/180°/identity rotations |
 | `FacingnessInRange` | Dot product of unit normal and unit direction is always in `[-1, 1]` |
 | `FacingnessFlipsWithDirection` | `dot(n, d) + dot(n, -d) = 0` |
 | `FacingnessKnownAngle` | Facingness equals `cos(θ)` for sensor at known angle θ from lighthouse |

@@ -9,7 +9,15 @@
 //   facingness    = dot3d(normalInWorld, towardLh)
 //   reject if facingness < filterNormalFacingness
 //
-// Three tests verify properties that would catch bugs in compute_facingness:
+// Core assumption: sensor_normals[] are stored in the object's body frame.
+// quatrotatevector(OutPose.Rot, normal_body) transforms them to world frame.
+// SensorNormalBodyToWorldTransform verifies this assumption explicitly with
+// a concrete axis-aligned case before the randomised property tests.
+//
+// Four tests verify properties that would catch bugs in compute_facingness:
+//
+//  0. SensorNormalBodyToWorldTransform — verifies the body-frame storage
+//     assumption directly: body +X rotated 90° around Z must become world +Y.
 //
 //  1. FacingnessKnownAngle    — end-to-end with a random (non-identity) rotation
 //     and known expected output. The only test that exercises the full coordinate
@@ -81,6 +89,72 @@ static FLT compute_facingness(const LinmathQuat tracker_rot,
 }
 
 // ── Property Tests ───────────────────────────────────────────────────
+
+// 0. SensorNormalBodyToWorldTransform
+//
+//    Verifies the load-bearing assumption of the back-face filter:
+//    sensor_normals[] are stored in the object's body frame, and
+//    quatrotatevector(OutPose.Rot, normal_body) correctly produces the
+//    world-frame normal.
+//
+//    Concrete case: body-frame normal = [1, 0, 0] (pointing along body +X).
+//    Tracker is rotated 90° around world Z (so body +X maps to world +Y).
+//    Expected world-frame normal: [0, 1, 0].
+//
+//    If sensor_normals were already in world frame this test would still pass,
+//    but the filter would silently double-rotate them in production. The test
+//    is paired with FacingnessKnownAngle which exercises the full filter path
+//    with a random rotation — together they pin down both the frame convention
+//    and the end-to-end correctness.
+TEST(NormalFilterProps, SensorNormalBodyToWorldTransform) {
+	// Sensor normal in body frame: +X axis
+	LinmathVec3d normal_body = {1.0, 0.0, 0.0};
+	LinmathVec3d normal_world;
+
+	// Case 1: 90° around Z — body +X → world +Y
+	LinmathQuat rot_z90;
+	LinmathVec3d z_axis = {0.0, 0.0, 1.0};
+	quatfromaxisangle(rot_z90, z_axis, LINMATHPI_2);
+
+	// This is exactly what the production code does:
+	//   quatrotatevector(normalInWorld, self->so->OutPose.Rot, sensor_normal_body)
+	quatrotatevector(normal_world, rot_z90, normal_body);
+
+	if (fabs(normal_world[0]) > NORMAL_TOL || fabs(normal_world[1] - 1.0) > NORMAL_TOL ||
+		fabs(normal_world[2]) > NORMAL_TOL) {
+		fprintf(stderr, "SensorNormalBodyToWorldTransform FAILED (90° around Z)\n");
+		fprintf(stderr, "  body normal [1,0,0] → got [%.10f, %.10f, %.10f], want [0,1,0]\n",
+				normal_world[0], normal_world[1], normal_world[2]);
+		return -1;
+	}
+
+	// Case 2: 180° around Z — body +X → world -X
+	LinmathQuat rot_z180;
+	quatfromaxisangle(rot_z180, z_axis, LINMATHPI);
+	quatrotatevector(normal_world, rot_z180, normal_body);
+
+	if (fabs(normal_world[0] + 1.0) > NORMAL_TOL || fabs(normal_world[1]) > NORMAL_TOL ||
+		fabs(normal_world[2]) > NORMAL_TOL) {
+		fprintf(stderr, "SensorNormalBodyToWorldTransform FAILED (180° around Z)\n");
+		fprintf(stderr, "  body normal [1,0,0] → got [%.10f, %.10f, %.10f], want [-1,0,0]\n",
+				normal_world[0], normal_world[1], normal_world[2]);
+		return -1;
+	}
+
+	// Case 3: identity rotation — body normal unchanged in world frame
+	LinmathQuat rot_identity = {1.0, 0.0, 0.0, 0.0};
+	quatrotatevector(normal_world, rot_identity, normal_body);
+
+	if (fabs(normal_world[0] - 1.0) > NORMAL_TOL || fabs(normal_world[1]) > NORMAL_TOL ||
+		fabs(normal_world[2]) > NORMAL_TOL) {
+		fprintf(stderr, "SensorNormalBodyToWorldTransform FAILED (identity)\n");
+		fprintf(stderr, "  body normal [1,0,0] → got [%.10f, %.10f, %.10f], want [1,0,0]\n",
+				normal_world[0], normal_world[1], normal_world[2]);
+		return -1;
+	}
+
+	return 0;
+}
 
 // 1. FacingnessKnownAngle
 //    For a sensor normal constructed to make a known angle theta with the

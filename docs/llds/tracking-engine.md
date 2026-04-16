@@ -257,6 +257,37 @@ the filter from drifting during stationary periods.
 `kalman-light-threshold-var` are rejected before the update step. This prevents
 large outliers (e.g., reflected light, interference) from corrupting the filter.
 
+**Input-level lightcap angular rate gate (`lc-angular-rate-max`):** Before
+accepting a lightcap batch, the filter predicts the pose at the batch timestamp
+and computes the angular distance from the last accepted batch's pose. If the
+implied angular rate (rad/s) exceeds `lc_angular_rate_max`, the batch is
+dropped without updating the Kalman state. This is a pre-update gate — the
+filter state is never touched for rejected batches. After a batch passes, the
+reference rotation and timestamp are updated for use on the next batch.
+
+Config: `--lc-angular-rate-max` (default: disabled). The reference is stored in
+`last_accepted_lc_rot` / `last_accepted_lc_time` in `SurviveKalmanTracker`.
+
+**Note on "defending wrong state":** This gate can lock out valid data if a
+prior reflection batch corrupted the Kalman state before the gate could fire —
+subsequent valid batches appear inconsistent with the corrupted state and are
+themselves rejected. The back-face filter in Protocol Intelligence (`Stage 1`
+of `SurviveSensorActivations_check_outlier`) addresses this by preventing
+reflections from entering the pipeline before the Kalman state can be corrupted.
+
+**Output-level pose angular rate gate (`kalman-max-pose-angular-rate`):** After
+a pose is computed in `report_state()`, the gate compares it to the last
+*emitted* pose. If the angular rate between the two exceeds the threshold, the
+pose is suppressed (not emitted to the application) and `stats.dropped_poses`
+is incremented. Unlike the input gate above, the Kalman internal state is
+already updated when this gate fires — it prevents bad output but does not
+prevent internal state drift.
+
+Config: `--kalman-max-pose-angular-rate` (default: -1, disabled). Reference
+stored in `last_reported_pose_rot` / `last_report_time`.
+
+See `docs/reflection-rejection.md` (Change 2) for implementation details.
+
 **Iterative IEKF updates for light:** Light measurements use the Iterated EKF
 (IEKF) update, which re-linearizes around the current estimate after each step.
 This handles the nonlinearity of the reprojection model and prevents
@@ -469,6 +500,9 @@ Library Infrastructure (pose hooks → application)
 | Adaptive R from residuals | R updated per-measurement from observed residuals | `cnkalman` adaptive R | Sensor noise varies by position, occlusion, reflection; learned R is more accurate than fixed R |
 | Per-LH adaptive R scaling | `lh_var = base_var * max(1.0, lh_res / mean_res)` | `survive_kalman_tracker.c` per-LH batch loop; `light_residuals[lh]` EWMA | Fixed R gives equal Kalman weight to all LHs; miscalibrated LHs pull state proportionally harder with more LHs active, causing jitter that grows with LH count |
 | Per-LH innovation gate disabled by default | `light_outlier_threshold = 0`; threshold of 5.0 recommended | Config item in `survive_kalman_tracker.c` | Gate fires on any anomalous frame; conservative default avoids false positives on new hardware or unusual geometry; opt-in once threshold is calibrated for the environment |
+| Input-level lightcap angular rate gate | `lc_angular_rate_max`; pre-update, drops batch before Kalman touch | `SurviveKalmanTracker.lc_angular_rate_max`, `last_accepted_lc_rot` in header | Prevents high-velocity batches from being applied; pairs with back-face filter — filter prevents the "defending wrong state" failure mode where this gate itself locks out valid data after a corruption |
+| Output-level pose angular rate gate | `max_pose_angular_rate`; post-update, suppresses emission | `survive_kalman_tracker_report_state()`, `stats.dropped_poses` | Guards downstream consumers from sudden pose jumps; Kalman state already updated, so this is a backstop for output quality, not state integrity |
+| Back-face filter as upstream prevention | Geometry check in Protocol Intelligence before Kalman | `SurviveSensorActivations_check_outlier()`, `filterNormalFacingness` | Reflections enter the Kalman pipeline only if the filter misses them; back-face filter eliminates the most common class (impossible geometry) before any downstream gate can be challenged |
 | FLT type (float/double configurable) | All math uses `FLT` typedef | `libs/cnmatrix/include/cnmatrix/cn_flt.h` | Float gives 2× speed on SIMD for acceptable precision; double available for calibration tools |
 
 ## Technical Debt & Inconsistencies

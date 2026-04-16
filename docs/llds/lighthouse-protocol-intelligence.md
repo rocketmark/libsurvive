@@ -92,6 +92,60 @@ the filter maintains:
 - Timecode of last valid reading
 - Motion detection via gyro/accel/light variance thresholds
 
+The filter is the earliest interception point in the pipeline and runs two
+rejection stages in order before any measurement reaches the Kalman tracker.
+
+#### Stage 1 — Back-Face Normal Filter
+
+A geometry-based pre-filter that rejects sensor hits that are physically
+impossible given the tracker's current orientation. Lighthouse sweep light
+cannot illuminate a sensor whose face points away from the lighthouse; such
+hits are almost certainly specular reflections from hard surfaces (LED walls,
+glass, monitor bezels).
+
+For each incoming hit `(sensor_id, lh, axis)`, the filter computes:
+
+```c
+normalInWorld = quatrotatevector(OutPose.Rot, sensor_normals[sensor_id])
+sensorInWorld = ApplyPoseToPoint(OutPose, sensor_locations[sensor_id])
+towardLH      = normalize(bsd[lh].Pose.Pos - sensorInWorld)
+facingness     = dot(normalInWorld, towardLH)
+
+if facingness < filterNormalFacingness: reject
+```
+
+The sensor normal is stored in the object's local frame (`sensor_normals`
+field); `quatrotatevector` maps it to world frame using the current tracker
+pose. `facingness = 1.0` means the sensor faces directly toward the lighthouse;
+`facingness = 0.0` is the geometric horizon; `facingness = -1.0` is directly
+away.
+
+**Guards** (any failing guard skips the filter entirely, passing the hit):
+- `filterNormalFacingness < -0.5` — disabled (threshold below -0.5 disables)
+- `so->sensor_normals == NULL` — device has no normals data (not all trackers)
+- `so->poseConfidence < filterNormalMinConfidence` — pose not yet reliable
+  enough to trust the world-frame normal computation
+- `!ctx->bsd[lh].PositionSet` — lighthouse not yet calibrated
+
+**Config items:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--filter-normal-facingness` | `0.0` | Min dot product to accept. `< -0.5` disables. Stagehand deploys `0.1` (~84° cone). |
+| `--filter-normal-min-confidence` | `0.1` | Min pose confidence before filter activates. |
+
+**Property tests:** `src/test_cases/normal_filter_props.c` (6 tests) covers
+`FacingnessInRange`, `FacingnessFlipsWithDirection`, `FacingnessKnownAngle`,
+`FacingnessThresholdMonotonic`, `DirectlyFacingAlwaysAccepted`,
+`BackFacingAlwaysRejected`.
+
+**Reference:** Ported from the simulator path at `src/driver_simulator.c:152–163`.
+The same filter exists there for virtual hardware; this change brings it to the
+real hardware path. See `docs/reflection-rejection.md` (Change 1) for full
+implementation details and `docs/back-face-filter-hld.md` for design rationale.
+
+#### Stage 2 — Chauvenet Statistical Outlier Rejection
+
 Outliers are rejected using the Chauvenet criterion: a new measurement is
 discarded if it falls more than N standard deviations from the running mean,
 where the threshold is configured by `angle-reject-outliers`. This prevents
@@ -226,7 +280,9 @@ survive_disambiguator.c
                    ▼
 
 survive_sensor_activations.c
-    │  outlier rejection, motion detection, validity gating
+    │  Stage 1: back-face normal filter (geometry-based)
+    │  Stage 2: Chauvenet outlier rejection
+    │  validity gating (require both axes per LH)
     ▼
 Tracking Engine (angles + BaseStationCal)
 ```
