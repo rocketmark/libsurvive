@@ -143,6 +143,18 @@ static inline bool SurviveSensorActivations_check_outlier(SurviveSensorActivatio
 	// if the sensor's surface normal points away from the lighthouse, the reading is physically impossible
 	// via direct illumination and is almost certainly a reflection artifact.
 	// Ported from the equivalent check in driver_simulator.c:152-163.
+	if (self->params.filterNormalFacingness > -0.5 && self->so) {
+		if (!self->so->sensor_normals || !self->so->sensor_locations) {
+			static bool warned_no_normals = false;
+			if (!warned_no_normals) {
+				warned_no_normals = true;
+				SurviveContext *ctx = self->so->ctx;
+				SV_INFO("back-face filter enabled (threshold %.2f) but %s has no sensor_normals/locations -- filter inactive",
+						self->params.filterNormalFacingness,
+						self->so->codename ? self->so->codename : "device");
+			}
+		}
+	}
 	if (self->params.filterNormalFacingness > -0.5 && self->so && self->so->sensor_normals &&
 		self->so->sensor_locations && self->so->poseConfidence >= self->params.filterNormalMinConfidence) {
 		SurviveContext *ctx = self->so->ctx;

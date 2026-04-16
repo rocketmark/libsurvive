@@ -433,7 +433,29 @@ int survive_load_htc_config_format(SurviveObject *so, char *ct0conf, int len) {
 			scale3d(&so->sensor_locations[i * 3], &so->sensor_locations[i * 3], scratch.sensor_scale);
 		}
 		ApplyPoseToPoint(&so->sensor_locations[i * 3], &trackref2imu, &so->sensor_locations[i * 3]);
-		quatrotatevector(&so->sensor_normals[i * 3], trackref2imu.Rot, &so->sensor_normals[i * 3]);
+		if (so->sensor_normals)
+			quatrotatevector(&so->sensor_normals[i * 3], trackref2imu.Rot, &so->sensor_normals[i * 3]);
+	}
+
+	// If the device config has sensor positions but no normals (e.g. Vive Tracker 2),
+	// approximate normals as unit vectors from the centroid to each sensor.
+	// The sensors sit on the dome surface, so this gives a reasonable outward-facing
+	// direction for the back-face filter.
+	if (so->sensor_normals == NULL && so->sensor_locations != NULL && so->sensor_ct > 0) {
+		so->sensor_normals = SV_CALLOC(sizeof(FLT) * 3 * so->sensor_ct);
+		FLT centroid[3] = {0, 0, 0};
+		for (int i = 0; i < so->sensor_ct; i++)
+			add3d(centroid, centroid, &so->sensor_locations[i * 3]);
+		scale3d(centroid, centroid, 1.0 / so->sensor_ct);
+		for (int i = 0; i < so->sensor_ct; i++) {
+			FLT *n = &so->sensor_normals[i * 3];
+			sub3d(n, &so->sensor_locations[i * 3], centroid);
+			FLT mag = magnitude3d(n);
+			if (mag < 1e-6) { n[0] = 0; n[1] = 0; n[2] = 1; }
+			else scale3d(n, n, 1.0 / mag);
+		}
+		SV_INFO("Computed approximate sensor normals from modelPoints for %s (%d sensors)",
+				so->codename ? so->codename : "device", so->sensor_ct);
 	}
 
 	so->has_sensor_locations = !sensorsAreZero;

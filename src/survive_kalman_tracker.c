@@ -478,15 +478,19 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 			// @spec TE-PROC-039
 			// Per-LH innovation gate: compute pre-update RMS residual via a dry-run
 			// of the measurement model (no state change). If it exceeds
-			// light_outlier_threshold × light_residuals_all, the LH is producing
+			// light_outlier_threshold × effective_mean, the LH is producing
 			// measurements too far from the current state estimate to be trusted
 			// (typically a reflection or severe miscalibration) and is skipped for
 			// this sync cycle.
-			// Require the EWMA to exceed a floor before gating: on cold start / after
-			// a reset the mean is tiny and 5*tiny ≈ 0, which rejects everything and
-			// prevents the EWMA from ever warming up (death spiral). 1e-4 is safely
-			// below steady-state residuals (~0.0002) but above the warm-up bootstrap.
-			if (tracker->light_outlier_threshold > 0 && tracker->light_residuals_all > 1e-4) {
+			//
+			// effective_mean = max(light_residuals_all, 1e-3) provides a hard floor
+			// on the gate cutoff. The gate compares pre-update batch RMS against
+			// light_outlier_threshold * effective_mean. Without the floor, during
+			// warm-up or after a cascade, the EWMA can fall near zero and the
+			// cutoff 5*~0 ≈ 0 drops everything, preventing recovery. With the floor
+			// the minimum cutoff is 5*1e-3 = 0.005, safely above clean tracking
+			// batch RMS (~0.001 typical) and well below reflection bursts (~0.04+).
+			if (tracker->light_outlier_threshold > 0) {
 				CN_CREATE_STACK_VEC(y_dry, cnt);
 				bool dry_ok = map_light_data(&cbctx, &Z, &tracker->model.state, &y_dry, NULL);
 				if (dry_ok) {
@@ -494,10 +498,11 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 					FLT sq = 0;
 					for (int i = 0; i < cnt; i++) sq += yv[i] * yv[i];
 					FLT rms = FLT_SQRT(sq / cnt);
-					if (rms > tracker->light_outlier_threshold * tracker->light_residuals_all) {
+					FLT effective_mean = linmath_max(tracker->light_residuals_all, 1e-3);
+					if (rms > tracker->light_outlier_threshold * effective_mean) {
 						SV_INFO("lc-gate: dropping LH%d batch rms=%.4f > %.1f*mean=%.4f for %s",
 								lh, rms, tracker->light_outlier_threshold,
-								tracker->light_residuals_all,
+								effective_mean,
 								survive_colorize_codename(tracker->so));
 						tracker->stats.lightcap_model_dropped++;
 						continue;

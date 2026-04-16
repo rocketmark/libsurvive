@@ -248,6 +248,15 @@ reflections, interference), unlike the adaptive R which responds to persistent r
 history. Disabled by default; recommended starting value 5.0. See
 `docs/reflection-rejection.md` for implementation details.
 
+**`light_residuals_all` floor (`1e-3` rad):** To prevent the EWMA baseline from collapsing
+to near-zero during unusually clean tracking, `light_residuals_all` is floored at `1e-3`
+before computing the gate threshold. Without the floor, baseline residuals ~0.0001 rad
+would produce an effective threshold of 5.0 × 0.0001 = 0.0005 rad — below typical clean-
+tracking RMS (~0.001 rad) — causing the gate to fire spuriously on valid batches. With the
+floor, the minimum threshold is 5.0 × 1e-3 = 0.005 rad, safely above clean noise.
+Implementation: `linmath_max(tracker->light_residuals_all, 1e-3)` in
+`survive_kalman_tracker.c`.
+
 **Stationary detection and ZVU:** When IMU variance falls below threshold
 (`kalman-stationary-*` config), the filter applies a Zero Velocity Update —
 a pseudo-measurement forcing velocity and acceleration to zero. This prevents
