@@ -32,6 +32,9 @@ STRUCT_CONFIG_SECTION(SurviveKalmanTracker)
 	STRUCT_CONFIG_ITEM("kalman-max-pose-angular-rate",
 					   "Maximum angular rate (rad/s) before suppressing pose output; -1 to disable",
 					   -1., t->max_pose_angular_rate)
+	STRUCT_CONFIG_ITEM("lc-angular-rate-max",
+					   "Maximum angular rate (rad/s) before rejecting lightcap batch input; -1 to disable",
+					   -1., t->lc_angular_rate_max)
 	STRUCT_CONFIG_ITEM("min-report-time",
 					   "Minimum kalman report time in s (-1 defaults to 1. / imu_hz)", -1., t->min_report_time)
 	STRUCT_CONFIG_ITEM("report-covariance", "Report covariance matrix every n poses", -1, t->report_covariance_cnt);
@@ -412,6 +415,28 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 			qsort(tracker->savedLight, tracker->savedLight_idx, sizeof(tracker->savedLight[0]), sort_by_lh_axis_sensor);
 		}
 
+		// Input-level angular rate gate: reject lightcap batches implying physically
+		// impossible rotation speed before they can corrupt the Kalman state.
+		// Unlike the output-level kalman-max-pose-angular-rate gate, this prevents
+		// the filter from ever integrating reflection data — the state stays clean
+		// and coasts on IMU-only until a valid batch arrives.
+		if (tracker->lc_angular_rate_max > 0 && tracker->last_accepted_lc_time > 0 &&
+			quatmagnitude(tracker->last_accepted_lc_rot) > 0.5) {
+			SurvivePose predicted = {0};
+			survive_kalman_tracker_predict(tracker, time, &predicted);
+			FLT dt = time - tracker->last_accepted_lc_time;
+			if (dt > 0) {
+				FLT ang_rate = quatdist(tracker->last_accepted_lc_rot, predicted.Rot) / dt;
+				if (ang_rate > tracker->lc_angular_rate_max) {
+					SV_INFO("lc-gate: dropping batch %.2f rad/s > lc-angular-rate-max %.2f for %s",
+							ang_rate, tracker->lc_angular_rate_max,
+							survive_colorize_codename(tracker->so));
+					tracker->stats.lightcap_model_dropped++;
+					return;
+				}
+			}
+		}
+
 		FLT rtn = 0;
 		while(tracker->savedLight_idx > 0) {
 			int lh = tracker->savedLight[tracker->savedLight_idx-1].lh;
@@ -457,7 +482,11 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 			// measurements too far from the current state estimate to be trusted
 			// (typically a reflection or severe miscalibration) and is skipped for
 			// this sync cycle.
-			if (tracker->light_outlier_threshold > 0 && tracker->light_residuals_all > 0) {
+			// Require the EWMA to exceed a floor before gating: on cold start / after
+			// a reset the mean is tiny and 5*tiny ≈ 0, which rejects everything and
+			// prevents the EWMA from ever warming up (death spiral). 1e-4 is safely
+			// below steady-state residuals (~0.0002) but above the warm-up bootstrap.
+			if (tracker->light_outlier_threshold > 0 && tracker->light_residuals_all > 1e-4) {
 				CN_CREATE_STACK_VEC(y_dry, cnt);
 				bool dry_ok = map_light_data(&cbctx, &Z, &tracker->model.state, &y_dry, NULL);
 				if (dry_ok) {
@@ -466,6 +495,10 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 					for (int i = 0; i < cnt; i++) sq += yv[i] * yv[i];
 					FLT rms = FLT_SQRT(sq / cnt);
 					if (rms > tracker->light_outlier_threshold * tracker->light_residuals_all) {
+						SV_INFO("lc-gate: dropping LH%d batch rms=%.4f > %.1f*mean=%.4f for %s",
+								lh, rms, tracker->light_outlier_threshold,
+								tracker->light_residuals_all,
+								survive_colorize_codename(tracker->so));
 						tracker->stats.lightcap_model_dropped++;
 						continue;
 					}
@@ -532,6 +565,14 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 		SV_DATA_LOG("res_error_light_", &rtn, 1);
 		SV_DATA_LOG("res_error_light_avg", &tracker->light_residuals_all, 1);
 		tracker->stats.lightcap_count++;
+
+		// Update the lightcap input gate reference now that this batch was accepted.
+		if (tracker->lc_angular_rate_max > 0) {
+			SurvivePose post = {0};
+			survive_kalman_tracker_predict(tracker, time, &post);
+			quatcopy(tracker->last_accepted_lc_rot, post.Rot);
+			tracker->last_accepted_lc_time = time;
+		}
 
 		survive_kalman_tracker_report_state(pd, tracker);
 	}
@@ -1614,6 +1655,7 @@ void survive_kalman_tracker_stats(SurviveKalmanTracker *tracker) {
 
 	memset(&tracker->stats, 0, sizeof(tracker->stats));
 	tracker->first_report_time = tracker->last_report_time = 0;
+	tracker->last_accepted_lc_time = 0;
 
 	SV_VERBOSE(5, " ");
 }
