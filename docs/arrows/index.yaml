@@ -9,8 +9,8 @@ arrows:
     blocks: []
     blockedBy: []
     detail: lighthouse-protocol-intelligence.md
-    next: "Complete Gen2 processing path and remove debug fprintf calls from lfsr_lh2.c"
-    drift: "Gen2 path (survive_process_gen2.c) is nearly empty; LFSR decoder has debug output"
+    next: "Complete Gen2 processing path in survive_process_gen2.c"
+    drift: "Gen2 processing path (survive_process_gen2.c) is nearly empty"
 
   device-driver-stack:
     status: MAPPED

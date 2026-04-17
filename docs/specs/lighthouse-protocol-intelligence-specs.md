@@ -34,7 +34,7 @@ Prefix: **LPI**
 
 - [x] **LPI-PROC-030**: The system shall identify the Gen2 lighthouse channel (0–31) by matching observed timing against 32 known LFSR polynomial sequences.
 - [x] **LPI-PROC-031**: When decoding Gen2 channel identity, the system shall tolerate ±2-sample timing deviation from the expected LFSR sequence.
-- [ ] **LPI-PROC-032**: The system shall remove debug output (fprintf calls) from the Gen2 LFSR decoder before production use.
+- [x] **LPI-PROC-032**: The system shall remove debug output (fprintf calls) from the Gen2 LFSR decoder before production use.
 
 ## Angle Computation
 

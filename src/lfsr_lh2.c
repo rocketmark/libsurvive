@@ -94,13 +94,10 @@ static uint32_t find_possible_polys(uint32_t sample, uint32_t mask, uint32_t *ti
 		uint32_t error = popcnt(error_bits);
 
 		if (error > 0) {
-			if (((i / 2) == 6) || ((i / 2) == 15))
-				fprintf(stderr, "Error for %d was %d %x %x %x\n", i, error, final_state & mask, sample & mask, mask);
 			rtn ^= (1 << i);
 		} else {
 			timings[i] = lfsr_lookup_query(poly_pair_lookups[i], state) - offset;
 			reconstructed_sample[i] = final_state;
-			fprintf(stderr, "Timing for %d was %u\n", i, timings[i]);
 		}
 	}
 
@@ -166,15 +163,11 @@ survive_channel survive_decipher_channel(const uint32_t *sample, const uint32_t 
 
 					if (error == 0)
 						break;
-				} else {
-					fprintf(stderr, "Err %d for %d (%d) %08x vs %08x %08x %08x\n", error, o, j, predicted_sample,
-							sample[i], mask[i], error_bits);
 				}
 			}
 
 			if (recon_samples[32 * i + j] == 0) {
 				possible_polys ^= (1u << j);
-				fprintf(stderr, "Eliminated %d\n", j);
 			}
 		}
 	}

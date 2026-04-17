@@ -778,7 +778,7 @@ TEST(ResidualCascade, SingleOutlierCanTriggerCascade) {
 // ── 8. Adaptive R (per-LH light_var scaling) Properties ─────────
 //
 // These test the invariants of the per-LH adaptive R formula introduced in
-// survive_kalman_tracker.c (TE-PROC-040):
+// survive_kalman_tracker.c (TE-PROC-038):
 //
 //   lh_var = (mean_res > 0 && lh_res > 0)
 //              ? base_var * max(1.0, lh_res / mean_res)

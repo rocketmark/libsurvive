@@ -53,17 +53,17 @@ Decodes raw photon timestamps into calibrated sweep angles and lighthouse calibr
 | Protocol autodetection | LPI-PROC-001 to 004 | 3 | 1 | 0 |
 | Gen1 disambiguation | LPI-PROC-010 to 016 | 7 | 0 | 0 |
 | OOTX decoding | LPI-PROC-020 to 027 | 6 | 1 | 0 |
-| Gen2 LFSR | LPI-PROC-030 to 032 | 2 | 1 | 0 |
+| Gen2 LFSR | LPI-PROC-030 to 032 | 3 | 0 | 0 |
 | Angle computation | LPI-PROC-040 to 042 | 3 | 0 | 0 |
 | Sensor activation filtering | LPI-PROC-050 to 053 | 4 | 0 | 0 |
 | Back-face normal filter | LPI-PROC-060 to 066 | 7 | 0 | 0 |
 | Reprojection model | LPI-DATA-060 to 063 | 4 | 0 | 0 |
 
-**Summary:** 36 of 40 specs implemented; 3 active gaps; 0 deferred.
+**Summary:** 37 of 40 specs implemented; 2 active gaps; 0 deferred.
 
 ## Key Findings
 
-1. **Gen2 path is incomplete** — `src/survive_process_gen2.c` is nearly empty; Gen2 LFSR decoder (`lfsr_lh2.c`) contains extensive debug `fprintf` calls indicating active development state. (LPI-PROC-032)
+1. **Gen2 path is incomplete** — `src/survive_process_gen2.c` is nearly empty. (Debug `fprintf` calls in `lfsr_lh2.c` removed 2026-04-17.)
 
 2. **One-way generation detection** — Once the system commits to Gen1 or Gen2 for a device, there is no recovery path. A mis-detection in the 500-packet window produces a bad session with no error surfaced. (LPI-PROC-004)
 
@@ -76,8 +76,7 @@ Decodes raw photon timestamps into calibrated sweep angles and lighthouse calibr
 ## Work Required
 
 ### Must Fix
-1. Remove debug `fprintf` calls from `src/lfsr_lh2.c` before any production Gen2 use (LPI-PROC-032)
-2. Complete `src/survive_process_gen2.c` — currently the Gen2 processing path is non-functional for full angle extraction (LPI-PROC-032, gap in spec coverage)
+1. Complete `src/survive_process_gen2.c` — currently the Gen2 processing path is non-functional for full angle extraction (gap in spec coverage)
 
 ### Should Fix
 3. Surface OOTX quality metrics (bad_crcs, bad_sync_bits, guess_bits) to callers so degraded calibration is visible (LPI-PROC-026)

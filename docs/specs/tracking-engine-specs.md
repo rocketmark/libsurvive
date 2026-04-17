@@ -46,8 +46,8 @@ Prefix: **TE**
 
 ## Kalman Lighthouse Tracker
 
-- [x] **TE-PROC-040**: The system shall maintain a 7-dimensional Kalman filter per lighthouse (position + quaternion) updated by pose observations from the geometric solvers.
-- [x] **TE-PROC-041**: The system shall support push/pop of lighthouse Kalman state to enable hypothesis testing without committing to a new lighthouse position.
+- [x] **TE-PROC-050**: The system shall maintain a 7-dimensional Kalman filter per lighthouse (position + quaternion) updated by pose observations from the geometric solvers.
+- [x] **TE-PROC-051**: The system shall support push/pop of lighthouse Kalman state to enable hypothesis testing without committing to a new lighthouse position.
 
 ## Reprojection Model
 

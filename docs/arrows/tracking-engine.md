@@ -15,7 +15,7 @@ Computes continuous 6-DOF pose and velocity for tracked objects by fusing lighth
 - [docs/llds/tracking-engine.md](../llds/tracking-engine.md)
 
 ### EARS
-- [docs/specs/tracking-engine-specs.md](../specs/tracking-engine-specs.md) (36 specs)
+- [docs/specs/tracking-engine-specs.md](../specs/tracking-engine-specs.md) (41 specs)
 
 ### Tests
 - src/test_cases/barycentric_svd.c
@@ -60,12 +60,12 @@ Computes continuous 6-DOF pose and velocity for tracked objects by fusing lighth
 | Poser interface | TE-API-001 to 005 | 5 | 0 | 0 |
 | Geometric pose solvers | TE-PROC-010 to 015 | 6 | 0 | 0 |
 | MPFIT optimizer | TE-PROC-020 to 025 | 6 | 0 | 0 |
-| Kalman object tracker | TE-PROC-030 to 039 | 10 | 0 | 0 |
-| Kalman lighthouse tracker | TE-PROC-040 to 041 | 2 | 0 | 0 |
+| Kalman object tracker | TE-PROC-030 to 042 | 10 | 3 | 0 |
+| Kalman lighthouse tracker | TE-PROC-050 to 051 | 2 | 0 | 0 |
 | Reprojection model | TE-DATA-050 to 053 | 4 | 0 | 0 |
 | Math infrastructure | TE-DATA-060 to 064 | 4 | 1 | 0 |
 
-**Summary:** 37 of 38 active specs implemented; 1 active gap (CI guard for codegen); 0 deferred.
+**Summary:** 37 of 41 active specs implemented; 4 active gaps (3 angular-rate gates TE-PROC-040/041/042, plus CI guard for codegen TE-DATA-064); 0 deferred.
 
 ## Key Findings
 
