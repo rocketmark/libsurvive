@@ -19,11 +19,10 @@
 
 Each item either (a) lets bad data through without visibility, or (b) makes on-set incident response harder because docs/specs don't match reality.
 
-- [ ] **LB-1 — Close spec drift on back-face filter** (`LPI-PROC-060` through `LPI-PROC-066`)
+- [x] **LB-1 — Close spec drift on back-face filter** (`LPI-PROC-060` through `LPI-PROC-066`)
   - Category: **coherence / operational safety**
-  - Feature deployed to both Pis with `--filter-normal-facingness 0.1`. Seven specs in [lighthouse-protocol-intelligence-specs.md](specs/lighthouse-protocol-intelligence-specs.md) still marked `[ ]`.
-  - Fix: mark `[x]`, update [lighthouse-protocol-intelligence.md](arrows/lighthouse-protocol-intelligence.md) arrow-doc coverage table.
-  - Risk if skipped: on-set grep "is the back-face filter in?" returns "not implemented" during a 3am incident.
+  - Feature deployed to both Pis with `--filter-normal-facingness 0.1`. Verified implemented in `src/survive_sensor_activations.c:139-183` (2026-04-17). All 7 specs marked `[x]` in [lighthouse-protocol-intelligence-specs.md](specs/lighthouse-protocol-intelligence-specs.md).
+  - Arrow-doc coverage table still needs updating in [lighthouse-protocol-intelligence.md](arrows/lighthouse-protocol-intelligence.md).
 
 - [ ] **LB-2 — Verify GSS solve-failure rejection** (`DDS-BE-054`)
   - Category: **fail-closed on calibration corruption**

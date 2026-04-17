@@ -15,7 +15,7 @@ Decodes raw photon timestamps into calibrated sweep angles and lighthouse calibr
 - [docs/llds/lighthouse-protocol-intelligence.md](../llds/lighthouse-protocol-intelligence.md)
 
 ### EARS
-- [docs/specs/lighthouse-protocol-intelligence-specs.md](../specs/lighthouse-protocol-intelligence-specs.md) (33 specs)
+- [docs/specs/lighthouse-protocol-intelligence-specs.md](../specs/lighthouse-protocol-intelligence-specs.md) (40 specs)
 
 ### Tests
 - src/test_cases/watchman.c
@@ -56,9 +56,10 @@ Decodes raw photon timestamps into calibrated sweep angles and lighthouse calibr
 | Gen2 LFSR | LPI-PROC-030 to 032 | 2 | 1 | 0 |
 | Angle computation | LPI-PROC-040 to 042 | 3 | 0 | 0 |
 | Sensor activation filtering | LPI-PROC-050 to 053 | 4 | 0 | 0 |
+| Back-face normal filter | LPI-PROC-060 to 066 | 7 | 0 | 0 |
 | Reprojection model | LPI-DATA-060 to 063 | 4 | 0 | 0 |
 
-**Summary:** 29 of 33 specs implemented; 3 active gaps; 0 deferred.
+**Summary:** 36 of 40 specs implemented; 3 active gaps; 0 deferred.
 
 ## Key Findings
 

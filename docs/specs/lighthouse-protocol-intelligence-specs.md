@@ -51,13 +51,13 @@ Prefix: **LPI**
 
 ## Back-Face Normal Filter
 
-- [ ] **LPI-PROC-060**: When `filter-normal-facingness` ≥ -0.5, the system shall evaluate each incoming sensor hit against the back-face criterion before any other filtering: compute `facingness = dot(quatrotatevector(OutPose.Rot, sensor_normals[sensor_id]), normalize(bsd[lh].Pose.Pos - sensorInWorld))` and reject the hit if `facingness < filterNormalFacingness`.
-- [ ] **LPI-PROC-061**: When `filter-normal-facingness` < -0.5, the system shall skip the back-face filter entirely and pass the hit to subsequent filtering stages unchanged.
-- [ ] **LPI-PROC-062**: If the tracked object's `sensor_normals` or `sensor_locations` field is NULL, the system shall skip the back-face filter for that object (not all device types carry sensor geometry data).
-- [ ] **LPI-PROC-063**: While `poseConfidence` is below `filter-normal-min-confidence`, the system shall skip the back-face filter (pose not yet reliable enough to compute a trustworthy world-frame normal).
-- [ ] **LPI-PROC-064**: If the lighthouse referenced by the incoming hit does not yet have `PositionSet`, the system shall skip the back-face filter for that hit (lighthouse position needed to compute direction-to-LH).
-- [ ] **LPI-PROC-065**: The back-face filter shall run before the Chauvenet outlier filter so that geometrically impossible hits are rejected upstream, before they influence the per-sensor running statistics.
-- [ ] **LPI-PROC-066**: When `filter-normal-facingness` ≥ -0.5 and a hit is rejected by the back-face filter, the system shall emit a `SV_VERBOSE(105)` log line including the measured facingness, the threshold, and the (lh, sensor_id, axis) triple.
+- [x] **LPI-PROC-060**: When `filter-normal-facingness` ≥ -0.5, the system shall evaluate each incoming sensor hit against the back-face criterion before any other filtering: compute `facingness = dot(quatrotatevector(OutPose.Rot, sensor_normals[sensor_id]), normalize(bsd[lh].Pose.Pos - sensorInWorld))` and reject the hit if `facingness < filterNormalFacingness`.
+- [x] **LPI-PROC-061**: When `filter-normal-facingness` < -0.5, the system shall skip the back-face filter entirely and pass the hit to subsequent filtering stages unchanged.
+- [x] **LPI-PROC-062**: If the tracked object's `sensor_normals` or `sensor_locations` field is NULL, the system shall skip the back-face filter for that object (not all device types carry sensor geometry data).
+- [x] **LPI-PROC-063**: While `poseConfidence` is below `filter-normal-min-confidence`, the system shall skip the back-face filter (pose not yet reliable enough to compute a trustworthy world-frame normal).
+- [x] **LPI-PROC-064**: If the lighthouse referenced by the incoming hit does not yet have `PositionSet`, the system shall skip the back-face filter for that hit (lighthouse position needed to compute direction-to-LH).
+- [x] **LPI-PROC-065**: The back-face filter shall run before the Chauvenet outlier filter so that geometrically impossible hits are rejected upstream, before they influence the per-sensor running statistics.
+- [x] **LPI-PROC-066**: When `filter-normal-facingness` ≥ -0.5 and a hit is rejected by the back-face filter, the system shall emit a `SV_VERBOSE(105)` log line including the measured facingness, the threshold, and the (lh, sensor_id, axis) triple.
 
 ## Reprojection Model
 
