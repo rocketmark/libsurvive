@@ -8,7 +8,7 @@
 
 33 open items in the libsurvive docs, bucketed by shoot-readiness impact.
 
-- 6 **launch blockers** — silent corruption or grey failures (LB-1/LB-2/LB-4/LB-5/LB-6 done pending deploy; LB-3 deferred to on-Pi recording milestone)
+- 6 **launch blockers** — silent corruption or grey failures (LB-1/LB-2/LB-4/LB-5/LB-6 done; LB-3 deferred to on-Pi recording milestone)
 - 5 **should fix before launch** — diagnosability gaps
 - 7 **nice to have** — robustness / dev hygiene
 - 8 **save for later** — irrelevant to stagehand (third-party bindings)
@@ -43,7 +43,7 @@ Each item either (a) lets bad data through without visibility, or (b) makes on-s
   - Bonus cleanup: `src/test_cases/residual_cascade_props.c:781` referenced `TE-PROC-040` but described the per-LH adaptive R formula → corrected to `TE-PROC-038`.
   - Arrow doc updated: tracking-engine.md spec count 36→41, Kalman object tracker row now 030–042 (10 impl, 3 gaps), Kalman lighthouse tracker row now 050–051.
 
-- [x] **LB-6 — Measure + enable pose-emission gates** (`kalman-max-pose-angular-rate`, `--light-max-error`) — **pending on-tracker verification**
+- [x] **LB-6 — Measure + enable pose-emission gates** (`kalman-max-pose-angular-rate`, `--light-max-error`)
   - Category: **operational safety / fail-closed on output**
   - Empirical data from [reflection-rejection.md](reflection-rejection.md): smallest reflection jump 30°/frame → ~31 rad/s at 60 Hz; clean tracker <1 rad/s. Sufficient to pick thresholds without new captures.
   - Config updated 2026-04-17 in [scripts/stagehand-health](../../stagehand/scripts/stagehand-health) `DEFAULT_SURVIVE_ARGS`:
@@ -51,7 +51,7 @@ Each item either (a) lets bad data through without visibility, or (b) makes on-s
     - `--light-max-error 0.01` (per-sensor reprojection-error gate)
   - Unit typo fix in [reflection-rejection.md:360-363](reflection-rejection.md): "3.1 rad/s" → "31 rad/s" (factor-of-10 error; 30° × 60 Hz = 0.524 rad × 60 = 31.4 rad/s).
   - Spec updates: TE-PROC-040/041/042 marked `[x]` — the code for both gates already existed ([survive_kalman_tracker.c](../../libsurvive/src/survive_kalman_tracker.c)); flags were just defaulted off.
-  - **Remaining**: deploy to both Pis and verify trackers still work.
+  - Deployed to both Pis 2026-04-17. Verified on 192.168.50.117: flags present in agent cmdline, Gen2 LH detection succeeded, GSS solve sensor_err 9.3e-5 rad / bestnorm 41.3, tracking active.
 
 ## Should Fix Before Launch
 
