@@ -56,9 +56,9 @@ Produces raw sensor events (light pulses, IMU, config, buttons) from physical ha
 | GATT lighthouse control | DDS-BE-020 to 023 | 4 | 0 | 0 |
 | Playback driver | DDS-BE-030 to 034 | 5 | 0 | 0 |
 | UDP driver | DDS-BE-040 to 042 | 3 | 0 | 0 |
-| Global scene solver | DDS-BE-050 to 054 | 4 | 1 | 0 |
+| Global scene solver | DDS-BE-050 to 054 | 5 | 0 | 0 |
 
-**Summary:** 30 of 31 active specs implemented; 1 active gap; 0 deferred.
+**Summary:** 31 of 31 active specs implemented; 0 active gaps; 0 deferred.
 
 ## Key Findings
 
@@ -75,12 +75,12 @@ Produces raw sensor events (light pulses, IMU, config, buttons) from physical ha
 ## Work Required
 
 ### Must Fix
-1. Add GSS solve-failure rejection path — if global scene solver result error exceeds threshold, retain previous calibration (DDS-BE-054)
+_(none — DDS-BE-054 verified implemented at poser_mpfit.c:978-989, retained in else branch; stagehand patch adds fail-loud callback at L981-988)_
 
 ### Should Fix
-2. Document `driver_usbmon.c` — what format it consumes and how to use it
-3. Document the off-by-two config length quirk in a comment visible to future USB backend implementors
-4. Evaluate `driver_simulator.c` — either complete it or mark it as unfinished
+1. Document `driver_usbmon.c` — what format it consumes and how to use it
+2. Document the off-by-two config length quirk in a comment visible to future USB backend implementors
+3. Evaluate `driver_simulator.c` — either complete it or mark it as unfinished
 
 ### Nice to Have
 5. Add GATT mode write confirmation readback (DDS-BE-022)

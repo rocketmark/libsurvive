@@ -24,12 +24,10 @@ Each item either (a) lets bad data through without visibility, or (b) makes on-s
   - Feature deployed to both Pis with `--filter-normal-facingness 0.1`. Verified implemented in `src/survive_sensor_activations.c:139-183` (2026-04-17). All 7 specs marked `[x]` in [lighthouse-protocol-intelligence-specs.md](specs/lighthouse-protocol-intelligence-specs.md).
   - Arrow-doc coverage table still needs updating in [lighthouse-protocol-intelligence.md](arrows/lighthouse-protocol-intelligence.md).
 
-- [ ] **LB-2 — Verify GSS solve-failure rejection** (`DDS-BE-054`)
+- [x] **LB-2 — Verify GSS solve-failure rejection** (`DDS-BE-054`)
   - Category: **fail-closed on calibration corruption**
-  - Spec: if global scene solver error exceeds threshold, reject result and retain previous calibration.
-  - `--max-cal-error 0.01` clamps the initial solve, but mid-session re-solve rejection may not be wired.
-  - Fix: audit `driver_global_scene_solver.c` for rejection path; implement if missing.
-  - Risk if skipped: bad GSS solve silently overwrites good calibration mid-shoot.
+  - Verified 2026-04-17. `solve_global_scene()` in `poser_mpfit.c:978-989` returns `false` when `status_failure || sensor_error > max_cal_error`. Calibration commit (`PoserData_lighthouse_poses_func` at L1047) is inside the success-only `else` branch — previous calibration retained by default on failure. `status_failure` also covers MPFit convergence errors (`res <= 0`) and max-iter termination.
+  - **Fail-loud bonus**: stagehand patch at L981-988 invokes `stagehand_gss_failure_cb` so the agent emits `GSS_FAILURE` LOG_EVENT with `bestnorm`. Spec marked `[x]`; arrow doc updated to 31/31.
 
 - [ ] **LB-3 — Recording file open/write failure = loud error** (`LI-BE-063`)
   - Category: **fail-loud (directly matches stagehand principle)**

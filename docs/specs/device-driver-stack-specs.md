@@ -49,4 +49,4 @@ Prefix: **DDS**
 - [x] **DDS-BE-051**: While a tracked object is in motion (detected via IMU), the system shall not accumulate measurements for global scene solving.
 - [x] **DDS-BE-052**: Where the `gss-auto-floor-height` config flag is set, the system shall set the floor Z coordinate from the minimum observed tracked object height.
 - [x] **DDS-BE-053**: Where the `disable-calibrate` config flag is set, the system shall skip all global scene solver activity.
-- [ ] **DDS-BE-054**: If the global scene solver produces a result with error above a configurable threshold, the system shall reject the result and retain the previous calibration.
+- [x] **DDS-BE-054**: If the global scene solver produces a result with error above a configurable threshold, the system shall reject the result and retain the previous calibration.

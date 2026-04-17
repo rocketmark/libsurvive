@@ -15,11 +15,11 @@ arrows:
   device-driver-stack:
     status: MAPPED
     sampled: 2026-04-12
-    audited: null
+    audited: 2026-04-17
     blocks: []
     blockedBy: []
     detail: device-driver-stack.md
-    next: "Add GSS solve-failure rejection and document driver_usbmon.c"
+    next: "Document driver_usbmon.c and off-by-two config length quirk"
     drift: "driver_global_scene_solver makes direct cross-cluster call into Tracking Engine"
 
   tracking-engine:
