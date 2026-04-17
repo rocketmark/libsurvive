@@ -357,9 +357,10 @@ lowering the suppress-threshold to something high like 10000 to log without reje
 This gives the distribution of angular rates during a clean tracking session. The gate threshold
 should be set above the 99th percentile of clean rates and below the smallest reflection jump.
 
-From the empirical data, the smallest reflection jump was 30° in one frame. At 60 Hz that's ~3.1
-rad/s. A clean tracker should be well below 1 rad/s in normal VP operation. Start the gate at
-**5–10 rad/s** and adjust.
+From the empirical data, the smallest reflection jump was 30° in one frame. At 60 Hz that's ~31
+rad/s (0.524 rad × 60 fps). A clean tracker should be well below 1 rad/s in normal VP operation.
+Start the gate at **5–10 rad/s** — comfortably below the smallest reflection (31 rad/s) and well
+above clean tracking (<1 rad/s).
 
 ### Step 2 — Verify normal filter rejection
 
