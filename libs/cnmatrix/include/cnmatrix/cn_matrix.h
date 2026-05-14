@@ -21,7 +21,7 @@
 
 #include <stdbool.h>
 
-#include <malloc.h>
+#include <stdlib.h>
 #include "cnmatrix/cn_flt.h"
 #include "math.h"
 #include "string.h"
