@@ -22,6 +22,9 @@
 #include <stdbool.h>
 
 #include <stdlib.h>
+#ifdef _WIN32
+#include <malloc.h>  // alloca on MSVC
+#endif
 #include "cnmatrix/cn_flt.h"
 #include "math.h"
 #include "string.h"
