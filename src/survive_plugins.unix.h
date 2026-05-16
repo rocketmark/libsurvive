@@ -46,14 +46,14 @@ static const char *get_exe_filename() {
 	if (exe_path[0] == 0) {
 #ifdef __APPLE__
 		uint32_t size = sizeof(exe_path);
-		if (_NSGetExecutablePath(exe_path, &size) != 0)
+		if (_NSGetExecutablePath(exe_path, &size) != 0) {
 			exe_path[0] = 0;
+		}
 #else
 		ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-		if (len > 0)
+		if (len > 0) {
 			exe_path[len] = 0;
-		else
-			exe_path[0] = 0;
+		}
 #endif
 	}
 	return exe_path;
