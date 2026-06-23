@@ -106,8 +106,11 @@ Fuzz math functions with adversarial and degenerate inputs to verify no crashes 
 | `KabschCollinear` | Kabsch with collinear points doesn't crash, produces finite translation (rotation underdetermined) |
 | `KabschCoplanar` | Kabsch with coplanar points doesn't crash, produces finite pose (rotation underdetermined around normal axis) |
 | `LargeQuatNoOverflow` | `quatrotatevector` with very large quaternion components doesn't overflow |
+| `AggregateErrorOverCountGate` | `sqrtf(sum/cnt)` compared against a status gate: `cnt==0` must never take the success branch; finite `sum`/`cnt>0` always yields finite `sensor_error`; the gate's success/failure decision is self-consistent with `sensor_error <= max_cal_error` |
 
 `quatnormalize(zero)` and `normalize3d(zero)` produce NaN (documented, not a crash). Callers that may receive zero-magnitude input must guard against NaN propagation at their own boundary.
+
+`AggregateErrorOverCountGate` is a regression test for the `mpfit_nan_guard` gap (Stagehand project, `poser_mpfit.c::solve_global_scene`): two existing guards filtered non-finite *inputs* into the GSS error accumulator, but nothing checked the *output* of `sqrtf(stats.sensor_error / stats.sensor_error_cnt)` before the success/failure branch. When every measurement was filtered upstream, `sensor_error_cnt` reached 0, producing `NaN`, which compares false against any threshold — so a 0-measurement solve silently took the success branch and poisoned the Kalman filter. The test isolates the divide-then-gate arithmetic so any optimizer code with the same shape (`status_failure || !isfinite(x) || x > threshold`) is exercised without needing a full `SurviveContext`/GSS scene fixture.
 
 ### 6. Reprojection Residual / BSVD Pose Solver (`reproject_residual_props.c`)
 
@@ -166,11 +169,11 @@ At the default threshold 0.0, sensors within 90° of the lighthouse are accepted
 | Reprojection | `reproject_props.c` | 13 | 65,000 |
 | Kabsch | `kabsch_props.c` | 5 | 25,000 |
 | Kalman Predict | `kalman_props.c` | 10 | ~74M steps |
-| Numeric Robustness | `numeric_props.c` | 10 | ~80,000 |
+| Numeric Robustness | `numeric_props.c` | 11 | ~90,000 |
 | Reprojection Residual | `reproject_residual_props.c` | 6 | 6,000 |
 | Event Queue | `event_queue_props.c` | 7 | ~3,500 |
 | Normal Filter | `normal_filter_props.c` | 3 | 30,000 |
-| **Total** | | **70** | |
+| **Total** | | **71** | |
 
 ## Running the Tests
 

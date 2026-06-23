@@ -314,7 +314,63 @@ TEST(NumericProps, KabschCoplanar) {
 	return 0;
 }
 
-// 10. Large quaternion components don't cause overflow in quatrotatevector
+// 10. Aggregate-error-over-count gate: mirrors solve_global_scene()'s
+//     `sensor_error = sqrtf(sum / cnt); if (status_failure || !isfinite(sensor_error) || ...)`
+//     pattern. Any optimizer success path that divides an accumulated error
+//     by a measurement count must reject non-finite results — including the
+//     cnt==0 case, where 0/0 produces NaN that compares false against every
+//     threshold and would otherwise fall through to "success".
+//     Regression test for the mpfit_nan_guard gap: two upstream guards
+//     filtered non-finite *inputs* to the accumulator, but nothing checked
+//     the *output* of the division before the success/failure decision.
+TEST(NumericProps, AggregateErrorOverCountGate) {
+	unsigned seed = (unsigned)time(NULL);
+	srand(seed);
+
+	// cnt == 0: every measurement was filtered upstream (e.g. all NaN angles).
+	{
+		FLT sum = 0, cnt = 0;
+		FLT sensor_error = sqrtf(sum / cnt);
+		int status_failure = 0; // upstream solve "succeeded" on zero measurements
+		FLT max_cal_error = 1.0;
+		int took_success_branch = !(status_failure || !isfinite(sensor_error) || sensor_error > max_cal_error);
+		if (took_success_branch) {
+			fprintf(stderr, "AggregateErrorOverCountGate FAILED: cnt=0 took success branch "
+							"(sensor_error=%f)\n", sensor_error);
+			return -1;
+		}
+	}
+
+	// Random finite sum/cnt with cnt>0 must never spuriously fail the
+	// isfinite check, and the gate must be self-consistent regardless of
+	// where the threshold falls.
+	for (int trial = 0; trial < N_TRIALS; trial++) {
+		FLT sum = rand_range(0.0, 1e6);
+		FLT cnt = rand_range(1.0, 1e4);
+		FLT sensor_error = sqrtf(sum / cnt);
+		FLT max_cal_error = rand_range(0.0, 100.0);
+		int status_failure = 0;
+
+		if (!isfinite(sensor_error)) {
+			fprintf(stderr, "AggregateErrorOverCountGate FAILED (seed=%u, trial=%d): "
+							"finite sum=%f cnt=%f produced non-finite sensor_error\n",
+					seed, trial, sum, cnt);
+			return -1;
+		}
+
+		int took_success_branch = !(status_failure || !isfinite(sensor_error) || sensor_error > max_cal_error);
+		int should_succeed = sensor_error <= max_cal_error;
+		if (took_success_branch != should_succeed) {
+			fprintf(stderr, "AggregateErrorOverCountGate FAILED (seed=%u, trial=%d): "
+							"gate disagreement sensor_error=%f max_cal_error=%f\n",
+					seed, trial, sensor_error, max_cal_error);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// 11. Large quaternion components don't cause overflow in quatrotatevector
 TEST(NumericProps, LargeQuatNoOverflow) {
 	unsigned seed = (unsigned)time(NULL);
 	srand(seed);
