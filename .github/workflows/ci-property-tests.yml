@@ -48,4 +48,4 @@ jobs:
         timeout-minutes: 5
         run: |
           ctest -C ${BUILD_TYPE} --output-on-failure --parallel \
-            -R '(quat|reproject|kabsch|kalman|numeric)_props'
+            -R '(quat|reproject|kabsch|kalman|numeric|event_queue|residual_cascade|variance_gate|normal_filter|disambiguator)_props'
