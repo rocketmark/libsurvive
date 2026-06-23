@@ -20,6 +20,11 @@ static const char *DriverNames[MAX_DRIVERS];
 static int NrDrivers;
 
 void RegisterDriver(const char *element, survive_driver_fn data) {
+	if (NrDrivers >= MAX_DRIVERS) {
+		fprintf(stderr, "FATAL: RegisterDriver(\"%s\") exceeds MAX_DRIVERS (%d); raise MAX_DRIVERS in survive_internal.h\n",
+				element, MAX_DRIVERS);
+		abort();
+	}
 	Drivers[NrDrivers] = data;
 	DriverNames[NrDrivers] = element;
 	NrDrivers++;
