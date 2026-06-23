@@ -166,10 +166,6 @@ static size_t construct_input_from_scene(const MPFITData *d, survive_long_timeco
 			continue;
 		}
 
-		if (ctx->bsd[lh].disable) {
-			continue;
-		}
-
 		if (!ctx->bsd[lh].PositionSet && (!isStationary || !ctx->bsd[lh].OOTXSet)) {
 			continue;
 		}
@@ -676,9 +672,6 @@ static void handle_results(MPFITData *d, PoserDataLight *lightData, FLT error, S
 			estimate->Pos[2] = 0;
 
 			for (int i = 0; i < so->ctx->activeLighthouses; i++) {
-				if (so->ctx->bsd[i].disable) {
-					continue; 
-				}
 				SurvivePose new_pos = *survive_get_lighthouse_position(so->ctx, i);
 				if (so->ctx->bsd[i].PositionSet) {
 					new_pos.Pos[2] -= adjust;
@@ -848,9 +841,6 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 		SV_VERBOSE(10, "Scene with pose (%s) " SurvivePose_format " %6.4f", mpfitctx.sos[i]->codename,
 				   SURVIVE_POSE_EXPAND(gss->scenes[i].pose), fabs(err_up[2] - 1.));
 		for (int j = 0; j < gss->scenes[i].meas_cnt; j++) {
-			if(ctx->bsd[gss->scenes[i].meas[j].lh].disable) {
-				continue; 
-			}
 			survive_optimizer_measurement *meas =
 				survive_optimizer_emplace_meas(&mpfitctx, survive_optimizer_measurement_type_light);
 			meas->light.object = i;
@@ -873,9 +863,6 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 	}
 
 	for (int i = 0; i < ctx->activeLighthouses; i++) {
-		if (ctx->bsd[i].disable) {
-			continue; 
-		} 
 		if (lh_meas[i] > 0)
 			SV_VERBOSE(10, "%d %d Measurements for %d", (int)lh_meas[i][0], (int)lh_meas[i][1], i);
 
@@ -959,9 +946,6 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 	}
 
 	for (int i = 0; i < ctx->activeLighthouses; i++) {
-		if (ctx->bsd[i].disable) {
-			continue;
-		}
 		if (quatiszero(survive_optimizer_get_camera(&mpfitctx)[i].Rot)) {
 			// survive_optimizer_fix_camera(&mpfitctx, i);
 			if (lh_meas[i][0] < 5 || lh_meas[i][1] < 5) {
@@ -1001,7 +985,7 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 				sensor_error, (int)mpfitctx.measurementsCnt, res, survive_optimizer_error(res));
 		/* Stagehand patch: notify agent so it can emit GSS_FAILURE LOG_EVENT.
 		 * bestnorm * 100 clamped to u16 matches the SHTP data field spec. */
-		{ extern __attribute__((weak)) void (*stagehand_gss_failure_cb)(unsigned);
+		{ extern void (*stagehand_gss_failure_cb)(unsigned);
 		  if (stagehand_gss_failure_cb) {
 		      double bn = result.bestnorm * 100.0;
 		      stagehand_gss_failure_cb(bn > 65535.0 ? 65535u : (unsigned)bn);
