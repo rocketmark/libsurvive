@@ -975,7 +975,12 @@ bool solve_global_scene(struct SurviveContext *ctx, MPFITData *d, PoserDataGloba
 	bool status_failure = res <= 0 || res == MP_MAXITER;
 	FLT sensor_covariance = d->sensor_variance * d->sensor_variance;
 	FLT sensor_error = sqrtf(mpfitctx.stats.sensor_error / mpfitctx.stats.sensor_error_cnt);
-	if (status_failure || sensor_error > d->opt.max_cal_error) {
+	/* Stagehand patch: sensor_error_cnt can be 0 if every measurement was
+	 * skipped by the isfinite guards above, making sensor_error NaN. NaN
+	 * compares false against max_cal_error, so without this check a NaN
+	 * solve falls through to the success branch and poisons the Kalman
+	 * filter (calibration-reset storm). */
+	if (status_failure || !isfinite(sensor_error) || sensor_error > d->opt.max_cal_error) {
 		SV_WARN("MPFIT status failure %f/%f/%f (%d measurements, %d, %s)", result.orignorm, result.bestnorm,
 				sensor_error, (int)mpfitctx.measurementsCnt, res, survive_optimizer_error(res));
 		/* Stagehand patch: notify agent so it can emit GSS_FAILURE LOG_EVENT.
