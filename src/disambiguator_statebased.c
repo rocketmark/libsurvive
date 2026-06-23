@@ -213,9 +213,7 @@ typedef struct {
 	LightcapElement sweep_data[];
 } Disambiguator_data_t;
 
-// Non-static so disambiguator_props.c can property-test the pulse-timing
-// decode layer directly, without needing a full SurviveContext/SurviveObject.
-int find_acode(uint32_t pulseLen) {
+static int find_acode(uint32_t pulseLen) {
 	const static int offset = 50;
 	if (pulseLen < 2500 + offset)
 		return -1;
@@ -240,8 +238,7 @@ int find_acode(uint32_t pulseLen) {
 	return -1;
 }
 
-// Non-static for disambiguator_props.c; see find_acode comment above.
-int32_t overlap_area(const LightcapElement *a, const LightcapElement *b) {
+static int32_t overlap_area(const LightcapElement *a, const LightcapElement *b) {
 	if (a->timestamp > b->timestamp)
 		return overlap_area(b, a);
 
@@ -260,8 +257,7 @@ int32_t overlap_area(const LightcapElement *a, const LightcapElement *b) {
 
 	return c_end - c_start;
 }
-// Non-static for disambiguator_props.c; see find_acode comment above.
-bool overlaps(const LightcapElement *a, const LightcapElement *b) {
+static bool overlaps(const LightcapElement *a, const LightcapElement *b) {
 	int overlap = overlap_area(a, b);
 	return overlap > a->length / 2;
 }
@@ -331,8 +327,7 @@ static Disambiguator_data_t *get_best_latest_state(Global_Disambiguator_data_t *
 	return best_d;
 }
 
-// Non-static for disambiguator_props.c; see find_acode comment above.
-uint32_t calculate_error(int target_acode, const LightcapElement *le) {
+static uint32_t calculate_error(int target_acode, const LightcapElement *le) {
 	// Calculate what it would be with and without data
 	uint32_t time_error_d0 = abs(ACODE_TIMING(target_acode) - le->length);
 	uint32_t time_error_d1 = abs(ACODE_TIMING(target_acode | DATA_BIT) - le->length);

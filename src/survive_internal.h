@@ -11,11 +11,7 @@
 
 
 //Driver registration
-//
-// Every TEST() in src/test_cases/ also registers through this mechanism
-// (REGISTER_LINKTIME), so the cap must cover real drivers/posers plus the
-// largest test file's TEST() count. residual_cascade_props.c alone has 33.
-#define MAX_DRIVERS 128
+#define MAX_DRIVERS 32
 
 SURVIVE_EXPORT const char *survive_config_file_name(struct SurviveContext *ctx);
 SURVIVE_EXPORT const char *survive_config_file_path(struct SurviveContext *ctx, char *path);

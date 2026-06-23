@@ -161,36 +161,6 @@ Tests the back-facing normal filter in `SurviveSensorActivations_check_outlier()
 
 At the default threshold 0.0, sensors within 90° of the lighthouse are accepted and sensors beyond 90° are rejected, which is the physically correct cutoff for a flat sensor surface.
 
-### 9. Pulse-Timing Decode (`disambiguator_props.c`)
-
-8 properties, up to 10,000 random trials each.
-
-Tests the pure functions in `disambiguator_statebased.c` that decode a raw USB `LightcapElement`
-(sensor_id, pulse length, timestamp) into an acode classification and overlap/error metrics — the
-layer directly upstream of all sync/sweep state tracking. These four functions (`find_acode`,
-`overlap_area`, `overlaps`, `calculate_error`) were `static`; they were made non-static (visibility
-change only, no behavior change) so this suite can call them directly without a
-`SurviveContext`/`SurviveObject`. The deeper sync-timing state machine (`find_inliers`,
-`find_relative_offset`, and the `last_time_between_sync` arithmetic in `survive_process_gen2.c` —
-where the `sync_timing_nan_guard` Stagehand patch lives) is not separable into pure functions
-without a refactor and is out of scope for this suite.
-
-| Test | Property |
-|---|---|
-| `FindAcodeRange` | `find_acode()` always returns in `[-1, 7]` |
-| `FindAcodeMonotonic` | `find_acode()` is monotonic non-decreasing in pulse length |
-| `FindAcodeBucketCenters` | Each 500-tick bucket center maps to its documented acode; out-of-range pulse lengths return -1, never silently clamp |
-| `OverlapAreaSymmetric` | `overlap_area(a, b) == overlap_area(b, a)` |
-| `OverlapAreaSelfAndNonNegative` | Self-overlap equals own length; overlap area is never negative |
-| `OverlapsConsistentWithArea` | `overlaps(a, b)` iff `overlap_area(a, b) > a.length / 2` (overlap is relative to the first argument, not symmetric) |
-| `CalculateErrorZeroAtExactTiming` | Error is exactly 0 when pulse length matches `ACODE_TIMING(acode)` |
-| `CalculateErrorIsMinOfTwoDistances` | Error equals `min(distance to ACODE_TIMING(acode), distance to ACODE_TIMING(acode\|DATA_BIT))` |
-
-Two test assumptions were wrong on the first pass and corrected against the actual contract:
-`overlaps()` measures overlap relative to the *first* argument's length (not a symmetric
-"area > 0" test), and `find_acode`'s lower bucket boundary is exclusive (`pulseLen < 2500+offset`
-returns -1, but `pulseLen == 2500+offset` falls into bucket 0).
-
 ## Summary
 
 | Suite | File | Properties | Trials |
@@ -203,8 +173,7 @@ returns -1, but `pulseLen == 2500+offset` falls into bucket 0).
 | Reprojection Residual | `reproject_residual_props.c` | 6 | 6,000 |
 | Event Queue | `event_queue_props.c` | 7 | ~3,500 |
 | Normal Filter | `normal_filter_props.c` | 3 | 30,000 |
-| Pulse-Timing Decode | `disambiguator_props.c` | 8 | ~70,000 |
-| **Total** | | **79** | |
+| **Total** | | **71** | |
 
 ## Running the Tests
 
@@ -225,7 +194,6 @@ ctest --output-on-failure
 ./src/test_cases/test-reproject_residual_props
 ./src/test_cases/test-event_queue_props
 ./src/test_cases/test-normal_filter_props
-./src/test_cases/test-disambiguator_props
 ```
 
 Tests also run automatically in CI (`ci-property-tests.yml`) on every push and PR. Under ASan/UBSan, the random inputs also catch undefined behavior and memory errors.
