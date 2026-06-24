@@ -7,7 +7,7 @@ SET(SURVIVE_TESTS
         reproject_residual_props event_queue_props
         residual_cascade_props
         variance_gate_props
-        normal_filter_props)
+        normal_filter_props mpfit_props)
 
 set(barycentric_svd_ADDITIONAL_SRCS ../barycentric_svd/barycentric_svd.c)
 set(reproject_residual_props_ADDITIONAL_SRCS ../barycentric_svd/barycentric_svd.c)

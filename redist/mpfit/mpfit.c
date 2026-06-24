@@ -1228,6 +1228,23 @@ static int mp_fdjac2(mp_func funct, int m, int n, int *ifree, int npar, FLT *x, 
 					/* Non-debug path for speed */
 					for (i = 0; i < m; i++, ij++) {
 						fjac[ij] = (wa[i] - fvec[i]) / h; /* fjac[i+m*j] */
+						/* Stagehand patch: the assert below is the only protection
+						 * against a non-finite derivative here, and asserts are
+						 * compiled out under -DNDEBUG (the Pi's Release build). A
+						 * degenerate user function (e.g. a residual that goes Inf
+						 * right after a Reinit-triggered scene reset) then writes
+						 * NaN/Inf straight into fjac, which poisons ratio/fnorm in
+						 * mpfit()'s outer loop. Every comparison against a NaN
+						 * ratio is false, so the iteration counter -- which only
+						 * advances inside the ratio>=p0001 success branch -- never
+						 * increments and the maxiter check never fires: an
+						 * unbounded CPU-spin hang instead of a clean failure
+						 * return. Sanitize to zero so the column is treated as
+						 * having no measurable gradient here, same outcome
+						 * mp_qrfac already handles safely via its ajnorm==0
+						 * guard. */
+						if (!isfinite(fjac[ij]))
+							fjac[ij] = 0;
 						assert(isfinite(fjac[ij]));
 					}
 				} else {
@@ -1264,6 +1281,11 @@ static int mp_fdjac2(mp_func funct, int m, int n, int *ifree, int npar, FLT *x, 
 					/* Non-debug path for speed */
 					for (i = 0; i < m; i++, ij++) {
 						fjac[ij] = (fjac[ij] - wa[i]) / (2 * h); /* fjac[i+m*j] */
+						/* Stagehand patch: same non-finite-derivative hang as the
+						 * one-sided path above -- this path had no assert at
+						 * all, debug or release. */
+						if (!isfinite(fjac[ij]))
+							fjac[ij] = 0;
 					}
 				} else {
 					/* Debug path for correctness */
