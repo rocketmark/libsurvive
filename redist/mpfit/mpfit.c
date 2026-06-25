@@ -1228,6 +1228,9 @@ static int mp_fdjac2(mp_func funct, int m, int n, int *ifree, int npar, FLT *x, 
 					/* Non-debug path for speed */
 					for (i = 0; i < m; i++, ij++) {
 						fjac[ij] = (wa[i] - fvec[i]) / h; /* fjac[i+m*j] */
+						/* assert is compiled out under NDEBUG; guard for real. */
+						if (!isfinite(fjac[ij]))
+							fjac[ij] = 0;
 						assert(isfinite(fjac[ij]));
 					}
 				} else {
@@ -1235,6 +1238,8 @@ static int mp_fdjac2(mp_func funct, int m, int n, int *ifree, int npar, FLT *x, 
 					for (i = 0; i < m; i++, ij++) {
 						FLT fjold = fjac[ij];
 						fjac[ij] = (wa[i] - fvec[i]) / h; /* fjac[i+m*j] */
+						if (!isfinite(fjac[ij]))
+							fjac[ij] = 0;
 						assert(isfinite(fjac[ij]));
 						if ((da == 0 && dr == 0 && (fjold != 0 || fjac[ij] != 0)) ||
 							((da != 0 || dr != 0) && (fabs(fjold - fjac[ij]) > da + fabs(fjold) * dr))) {
@@ -1264,6 +1269,8 @@ static int mp_fdjac2(mp_func funct, int m, int n, int *ifree, int npar, FLT *x, 
 					/* Non-debug path for speed */
 					for (i = 0; i < m; i++, ij++) {
 						fjac[ij] = (fjac[ij] - wa[i]) / (2 * h); /* fjac[i+m*j] */
+						if (!isfinite(fjac[ij]))
+							fjac[ij] = 0;
 					}
 				} else {
 					/* Debug path for correctness */
