@@ -138,6 +138,7 @@ typedef struct SurviveKalmanTracker {
 	FLT imu_residuals;
 	FLT light_residuals_all;
 	FLT light_residuals[NUM_GEN2_LIGHTHOUSES];
+	uint32_t light_gate_consecutive_drops[NUM_GEN2_LIGHTHOUSES];
 
 	FLT Obs_R[7 * 7];
 	FLT IMU_R[6 * 6];

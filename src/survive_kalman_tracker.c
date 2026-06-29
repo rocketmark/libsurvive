@@ -25,6 +25,11 @@
 
 #define SURVIVE_MODEL_MAX_STATE_CNT (sizeof(SurviveKalmanModel) / sizeof(FLT))
 
+// @spec TE-PROC-039
+// Consecutive per-LH gate rejections before the lc-gate force-accepts a batch
+// to break the light_residuals_all EWMA deadlock (see lc-gate comment below).
+#define LIGHT_GATE_MAX_CONSECUTIVE_DROPS 5
+
 // clang-format off
 STRUCT_CONFIG_SECTION(SurviveKalmanTracker)
 	STRUCT_CONFIG_ITEM("light-error-threshold",  "Error limit to invalidate position",
@@ -490,6 +495,16 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 			// cutoff 5*~0 ≈ 0 drops everything, preventing recovery. With the floor
 			// the minimum cutoff is 5*1e-3 = 0.005, safely above clean tracking
 			// batch RMS (~0.001 typical) and well below reflection bursts (~0.04+).
+			//
+			// light_residuals_all only updates from accepted batches, so a batch
+			// rejected by the gate can never loosen the gate that rejected it. If
+			// a newly-joining lighthouse (or any state perturbation) pushes every
+			// LH's RMS above the cutoff at once, the gate and the EWMA it depends
+			// on deadlock permanently — observed in production when a 2nd/3rd
+			// lighthouse came online after tracking had converged on one LH alone.
+			// LIGHT_GATE_MAX_CONSECUTIVE_DROPS force-accepts a batch after this
+			// many consecutive rejections per LH, so light_residuals_all updates
+			// and the gate can re-calibrate instead of starving forever.
 			if (tracker->light_outlier_threshold > 0) {
 				CN_CREATE_STACK_VEC(y_dry, cnt);
 				bool dry_ok = map_light_data(&cbctx, &Z, &tracker->model.state, &y_dry, NULL);
@@ -500,15 +515,22 @@ void survive_kalman_tracker_integrate_saved_light(SurviveKalmanTracker *tracker,
 					FLT rms = FLT_SQRT(sq / cnt);
 					FLT effective_mean = linmath_max(tracker->light_residuals_all, 1e-3);
 					if (rms > tracker->light_outlier_threshold * effective_mean) {
-						SV_INFO("lc-gate: dropping LH%d batch rms=%.4f > %.1f*mean=%.4f for %s",
-								lh, rms, tracker->light_outlier_threshold,
-								effective_mean,
+						if (tracker->light_gate_consecutive_drops[lh] < LIGHT_GATE_MAX_CONSECUTIVE_DROPS) {
+							tracker->light_gate_consecutive_drops[lh]++;
+							SV_INFO("lc-gate: dropping LH%d batch rms=%.4f > %.1f*mean=%.4f for %s",
+									lh, rms, tracker->light_outlier_threshold,
+									effective_mean,
+									survive_colorize_codename(tracker->so));
+							tracker->stats.lightcap_model_dropped++;
+							continue;
+						}
+						SV_INFO("lc-gate: force-accepting LH%d batch rms=%.4f after %d consecutive drops for %s",
+								lh, rms, tracker->light_gate_consecutive_drops[lh],
 								survive_colorize_codename(tracker->so));
-						tracker->stats.lightcap_model_dropped++;
-						continue;
 					}
 				}
 			}
+			tracker->light_gate_consecutive_drops[lh] = 0;
 
 			SurviveObject *so = tracker->so;
 
